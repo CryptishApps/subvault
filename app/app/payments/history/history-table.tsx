@@ -30,6 +30,7 @@ interface Payment {
     executed_count: number
     transaction_hashes: string[] | null
     created_at: string
+    last_payment_date: string | null
     series_id: string | null
     chain: string
     vault: {
@@ -144,11 +145,11 @@ export function PaymentHistoryTable({ payments }: PaymentHistoryTableProps) {
                                         </TableCell>
                                         <TableCell>
                                             <span className="text-sm text-muted-foreground">
-                                                {formatDistance(
-                                                    new Date(payment.created_at),
+                                                {payment.last_payment_date ? formatDistance(
+                                                    new Date(payment.last_payment_date),
                                                     new Date(),
                                                     { addSuffix: true }
-                                                )}
+                                                ) : 'N/A'}
                                             </span>
                                         </TableCell>
                                         <TableCell>

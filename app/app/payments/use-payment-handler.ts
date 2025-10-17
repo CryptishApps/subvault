@@ -83,7 +83,7 @@ export function usePaymentHandler(
                     version: "2.0.0",
                     atomicRequired: true,
                     chainId: `0x${chainId.toString(16)}`,
-                    from: allAccounts[0], // Sub Account (first with defaultAccount: 'sub')
+                    from: subAccountAddress, // Sub Account (first with defaultAccount: 'sub')
                     calls: [{
                         to: usdcAddress,
                         data,
