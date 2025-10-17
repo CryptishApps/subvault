@@ -3,6 +3,8 @@
 
 @import "./themes.css";
 
+@source "../node_modules/@ferrucc-io/emoji-picker";
+
 @custom-variant dark (&:is(.dark *));
 
 @custom-variant fixed (&:is(.layout-fixed *));

@@ -4,8 +4,6 @@ import { createPublicClient, http } from 'viem'
 import { base, baseSepolia } from 'viem/chains'
 import { generatePassword } from '@/lib/utils'
 
-// Create viem clients at module level (as per Base documentation)
-// https://docs.base.org/base-account/guides/authenticate-users
 const baseClient = createPublicClient({ chain: base, transport: http() })
 const baseSepoliaClient = createPublicClient({ chain: baseSepolia, transport: http() })
 
@@ -19,10 +17,6 @@ export async function POST(request: NextRequest) {
             }, { status: 400 })
         }
 
-        console.log('🔐 Verifying signature for address:', address)
-        console.log('📝 Message to verify:', message)
-        console.log('✍️  Signature:', signature)
-
         // Extract nonce from message (SIWE format)
         const nonce = message.match(/Nonce: (\w+)/)?.[1]
         if (!nonce) {
@@ -35,8 +29,6 @@ export async function POST(request: NextRequest) {
         const chainIdMatch = message.match(/Chain ID: (\d+)/)
         const chainId = chainIdMatch ? parseInt(chainIdMatch[1]) : 8453 // Default to Base mainnet
         const client = chainId === 84532 ? baseSepoliaClient : baseClient
-        
-        console.log('⛓️  Using chain:', chainId === 84532 ? 'Base Sepolia' : 'Base', `(ID: ${chainId})`)
 
         // Check if nonce exists and is not expired in Supabase
         const supabaseAdmin = await createAdminClient()
@@ -59,38 +51,18 @@ export async function POST(request: NextRequest) {
             .delete()
             .eq('nonce', nonce)
 
-        // Check if smart contract wallet
-        const bytecode = await client.getBytecode({ address: address as `0x${string}` })
-        const isDeployed = bytecode !== undefined && bytecode !== '0x'
-        console.log('📦 Contract deployed:', isDeployed)
-        
         // Verify the signature (viem handles ERC-6492 and ERC-1271 automatically)
-        console.log('🔍 Verifying signature...')
-        let isValid = false
-        try {
-            isValid = await client.verifyMessage({
-                address: address as `0x${string}`,
-                message,
-                signature: signature as `0x${string}`
-            })
-            console.log('✅ Verification result:', isValid)
-        } catch (error) {
-            console.error('❌ Verification error:', error)
-            console.error('   Error details:', JSON.stringify(error, null, 2))
-        }
+        const isValid = await client.verifyMessage({
+            address: address as `0x${string}`,
+            message,
+            signature: signature as `0x${string}`
+        })
 
         if (!isValid) {
-            console.error('❌ Signature verification failed for address:', address)
-            console.error('   Chain:', chainId === 84532 ? 'Base Sepolia' : 'Base', `(ID: ${chainId})`)
-            console.error('   Contract deployed:', isDeployed)
-            console.error('   Message:', message)
-            console.error('   Signature:', signature.substring(0, 100) + '...')
             return NextResponse.json({
                 error: 'Invalid signature'
             }, { status: 401 })
         }
-
-        console.log('✅ Signature verified successfully for address:', address)
 
         const simulatedEmail = `${address}@siwe.subvault.xyz`
         const password = generatePassword(address)
@@ -150,6 +122,5 @@ export async function GET() {
         .from('auth_nonces')
         .insert({ nonce, expires_at: expiresAt.toISOString() })
 
-    console.log('Generated nonce:', nonce)
     return NextResponse.json({ nonce })
 }

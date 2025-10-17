@@ -119,9 +119,9 @@ export function CreateVaultModal({
             const result = isEditMode
                 ? await updateVault(vault.id, values)
                 : await createVault({
-                      ...values,
-                      chain_id: chainId,
-                  } as CreateVaultInput)
+                    ...values,
+                    chain_id: chainId,
+                } as CreateVaultInput)
 
             if (result.error) {
                 toast.error(result.error, { id: toastId })
@@ -183,12 +183,19 @@ export function CreateVaultModal({
                                                         {field.value || "🏦"}
                                                     </Button>
                                                 </PopoverTrigger>
-                                                <PopoverContent className="w-full p-0" align="start">
-                                                    <EmojiPicker onEmojiSelect={(emoji: string) => field.onChange(emoji)}>
+                                                <PopoverContent 
+                                                    className="w-auto p-2 max-h-[90vh]"
+                                                    collisionPadding={10}
+                                                >
+                                                    <EmojiPicker
+                                                        onEmojiSelect={(emoji: string) => {
+                                                            field.onChange(emoji);
+                                                        }}
+                                                    >
                                                         <EmojiPicker.Header>
                                                             <EmojiPicker.Input placeholder="Search emoji" />
                                                         </EmojiPicker.Header>
-                                                        <EmojiPicker.Group className="overflow-y-auto max-h-[250px]">
+                                                        <EmojiPicker.Group>
                                                             <EmojiPicker.List />
                                                         </EmojiPicker.Group>
                                                     </EmojiPicker>
@@ -262,8 +269,8 @@ export function CreateVaultModal({
                                         ? "Updating..."
                                         : "Creating..."
                                     : isEditMode
-                                      ? "Update Vault"
-                                      : "Create Vault"}
+                                        ? "Update Vault"
+                                        : "Create Vault"}
                             </Button>
                         </DialogFooter>
                     </form>

@@ -73,18 +73,13 @@ export function LoginForm({
                 }
             };
 
-            console.log("Connect response:", connectResponse);
-            console.log("Full response structure:", JSON.stringify(connectResponse, null, 2));
             const { address } = connectResponse.accounts[0];
             
             // Check both possible locations for SIWE data
             const siweData = connectResponse.signInWithEthereum || (connectResponse.accounts[0] as any)?.capabilities?.signInWithEthereum;
-            console.log("SIWE data found:", siweData);
 
             if (siweData && siweData.message && siweData.signature) {
                 const { message, signature } = siweData;
-                console.log('SIWE message:', message);
-                console.log('SIWE signature:', signature);
 
                 // 4 — Verify signature on the server
                 toast.loading("Verifying signature...", { id: toastId });
@@ -104,22 +99,27 @@ export function LoginForm({
                     throw new Error('Session set failed');
                 }
                 
-                // Store sub account address (auto-created on connect)
+                // Create and store sub account address
                 toast.loading("Setting up your account...", { id: toastId });
                 try {
                     const sdk = getBaseAccountSDK()
                     const subProvider = sdk.getProvider()
-                    const accounts = await subProvider.request({
-                        method: "eth_accounts",
-                        params: [],
-                    }) as string[]
+                    const subAccount = await subProvider.request({
+                        method: 'wallet_addSubAccount',
+                        params: [
+                            {
+                                account: {
+                                    type: 'create',
+                                },
+                            }
+                        ],
+                    }) as { address: string }
                     
-                    if (accounts.length > 0) {
-                        const subAccountAddress = accounts[0] // First account with defaultAccount: 'sub'
-                        await storeSubAccount(subAccountAddress)
+                    if (subAccount?.address) {
+                        await storeSubAccount(subAccount.address)
                     }
                 } catch (subAccountError) {
-                    console.error("Failed to store sub account:", subAccountError)
+                    console.error("Failed to create sub account:", subAccountError)
                     // Don't fail the login, just log the error
                 }
                 
@@ -130,8 +130,6 @@ export function LoginForm({
                 router.refresh();
             } else {
                 // Fallback: manual signing if SIWE not available
-                console.log("⚠️ SIWE not available, using manual signing");
-
                 // Create SIWE message manually
                 const domain = window.location.host;
                 const uri = window.location.origin;
@@ -162,22 +160,29 @@ export function LoginForm({
                     throw new Error('Session set failed');
                 }
                 
-                // Store sub account address (auto-created on connect)
+                // Create and store sub account address
                 toast.loading("Setting up your account...", { id: toastId });
                 try {
                     const sdk = getBaseAccountSDK()
                     const subProvider = sdk.getProvider()
-                    const accounts = await subProvider.request({
-                        method: "eth_accounts",
-                        params: [],
-                    }) as string[]
+                    const subAccount = await subProvider.request({
+                        method: 'wallet_addSubAccount',
+                        params: [
+                            {
+                                account: {
+                                    type: 'create',
+                                },
+                            }
+                        ],
+                    }) as { address: string }
                     
-                    if (accounts.length > 0) {
-                        const subAccountAddress = accounts[0] // First account with defaultAccount: 'sub'
-                        await storeSubAccount(subAccountAddress)
+                    if (subAccount?.address) {
+                        await storeSubAccount(subAccount.address)
+                    } else {
+                        throw new Error('Failed to create sub account');
                     }
                 } catch (subAccountError) {
-                    console.error("Failed to store sub account:", subAccountError)
+                    console.error("Failed to create sub account:", subAccountError)
                     // Don't fail the login, just log the error
                 }
                 

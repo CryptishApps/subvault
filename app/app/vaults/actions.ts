@@ -523,6 +523,53 @@ export async function getSubAccountAddress() {
     }
 }
 
+export async function storePaymentTransaction(id: string, txHash: string) {
+    try {
+        const supabase = await createClient()
+
+        // Get existing transaction hashes
+        const { data: payment, error: fetchError } = await supabase
+            .from("payments")
+            .select("transaction_hashes")
+            .eq("id", id)
+            .single()
+
+        if (fetchError) {
+            console.error("Error fetching payment:", fetchError)
+            return { error: fetchError.message }
+        }
+
+        // Append new transaction hash
+        const existingHashes = (payment.transaction_hashes as string[]) || []
+        const updatedHashes = [...existingHashes, txHash]
+
+        // Get current executed_count
+        const { data: currentPayment } = await supabase
+            .from("payments")
+            .select("executed_count")
+            .eq("id", id)
+            .single()
+
+        const { error } = await supabase
+            .from("payments")
+            .update({
+                transaction_hashes: updatedHashes,
+                last_payment_date: new Date().toISOString(),
+                executed_count: (currentPayment?.executed_count || 0) + 1
+            })
+            .eq("id", id)
+
+        if (error) {
+            console.error("Error storing transaction:", error)
+            return { error: error.message }
+        }
+
+        return { success: true }
+    } catch (error) {
+        return { error: "Failed to store transaction" }
+    }
+}
+
 export async function updatePaymentExecutionDate(id: string, nextDate: string | null) {
     try {
         const supabase = await createClient()

@@ -1,7 +1,24 @@
 import { useState } from "react"
 import { toast } from "sonner"
+import { encodeFunctionData } from "viem"
 import { getBaseAccountSDK } from "@/lib/base"
-import { updatePaymentExecutionDate } from "../vaults/actions"
+import { updatePaymentExecutionDate, storePaymentTransaction } from "../vaults/actions"
+
+// USDC contract addresses
+const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+const USDC_BASE_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+
+// ERC-20 ABI for transfer function
+const erc20Abi = [{
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+        { name: 'to', type: 'address' },
+        { name: 'amount', type: 'uint256' }
+    ],
+    outputs: [{ name: 'success', type: 'bool' }]
+}] as const
 
 interface Payment {
     id: string
@@ -26,35 +43,51 @@ export function usePaymentHandler(
         }
 
         setPayingPaymentId(payment.id)
-        const toastId = toast.loading("Processing payment...")
+        const toastId = toast.loading("Sending payment...")
 
         try {
             // Get the Base Account SDK provider
             const sdk = getBaseAccountSDK()
             const provider = sdk.getProvider()
 
-            // Convert amount to hex (already in smallest unit - USDC has 6 decimals)
-            const amountHex = `0x${BigInt(payment.amount).toString(16)}`
+            // Get all accounts - first account is Sub Account with defaultAccount: 'sub'
+            const allAccounts = await provider.request({
+                method: 'eth_accounts',
+                params: []
+            }) as string[]
 
             // Use the chain stored on the payment record
             const paymentChain = payment.chain as 'base' | 'base-sepolia'
             const chainId = paymentChain === 'base' ? 8453 : 84532
+            const usdcAddress = paymentChain === 'base' ? USDC_BASE : USDC_BASE_SEPOLIA
             const paymasterUrl = paymentChain === 'base' 
                 ? process.env.NEXT_PUBLIC_PAYMASTER_URL_BASE 
                 : process.env.NEXT_PUBLIC_PAYMASTER_URL_BASE_SEPOLIA
 
-            // Send the payment using wallet_sendCalls
+            // Encode USDC transfer (Sub Account will request spend permission automatically if needed)
+            const data = encodeFunctionData({
+                abi: erc20Abi,
+                functionName: 'transfer',
+                args: [
+                    payment.recipient_address as `0x${string}`,
+                    BigInt(payment.amount)
+                ],
+            })
+
+            // Send the transaction from Sub Account
+            // First time: Shows "Skip further approvals" checkbox with Auto Spend Permissions
+            // Subsequent: No popup, automatic execution using granted permissions
             const response = await provider.request({
                 method: 'wallet_sendCalls',
                 params: [{
-                    version: "2.0",
+                    version: "2.0.0",
                     atomicRequired: true,
                     chainId: `0x${chainId.toString(16)}`,
-                    from: subAccountAddress,
+                    from: allAccounts[0], // Sub Account (first with defaultAccount: 'sub')
                     calls: [{
-                        to: payment.recipient_address,
-                        data: '0x', // Empty data for simple transfer
-                        value: amountHex,
+                        to: usdcAddress,
+                        data,
+                        value: '0x0',
                     }],
                     capabilities: {
                         paymasterUrl,
@@ -62,9 +95,17 @@ export function usePaymentHandler(
                 }]
             })
 
-            // Extract the transaction hash from the response
             const txHash = typeof response === 'string' ? response : (response as any)?.hash || 'unknown'
-            toast.success(`Payment sent successfully!`, { id: toastId })
+            
+            // Store transaction hash in database
+            if (txHash && txHash !== 'unknown') {
+                await storePaymentTransaction(payment.id, txHash)
+            }
+
+            toast.success(`Payment sent successfully!`, { 
+                id: toastId,
+                description: txHash !== 'unknown' ? `Transaction: ${txHash.slice(0, 10)}...` : undefined
+            })
 
             // Mark payment as completed
             await updatePaymentExecutionDate(payment.id, null)
