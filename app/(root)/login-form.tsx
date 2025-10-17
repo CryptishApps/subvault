@@ -9,8 +9,6 @@ import {
     FieldGroup,
     FieldLabel,
 } from "@/components/ui/field"
-import { createBaseAccountSDK } from '@base-org/account';
-
 import loginImage from '@/assets/login-image.webp';
 import Image from "next/image"
 import { useCallback, useState } from "react"
@@ -20,6 +18,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { getBaseAccountSDK } from "@/lib/base"
 
 export function LoginForm({
     className,
@@ -35,12 +34,7 @@ export function LoginForm({
         setIsLoading(true);
         const toastId = toast.loading("Connecting to your wallet...");
         try {
-            const sdk = createBaseAccountSDK(
-                {
-                    appName: 'SubVault',
-                    appLogoUrl: 'https://base.org/logo.png',
-                }
-            );
+            const sdk = getBaseAccountSDK();
 
             const provider = sdk.getProvider();
             

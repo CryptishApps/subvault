@@ -74,6 +74,9 @@ export function usePaymentHandler(
                 ],
             })
 
+            console.log('allAccounts', allAccounts)
+            console.log('subAccountAddress', subAccountAddress)
+
             // Send the transaction from Sub Account
             // First time: Shows "Skip further approvals" checkbox with Auto Spend Permissions
             // Subsequent: No popup, automatic execution using granted permissions
