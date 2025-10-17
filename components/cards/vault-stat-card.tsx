@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/empty"
 import { CreateVaultModal } from "@/components/modals/create-vault"
 import { useAuth } from "@/components/auth-provider"
-import { IconCircleKey } from "@tabler/icons-react"
+import { IconArrowRight, IconCircleKey, IconCirclePlus } from "@tabler/icons-react"
+import { ButtonGroup } from "../ui/button-group"
 
 interface VaultStatCardProps {
     count: number
@@ -41,13 +42,21 @@ export function VaultStatCard({ count }: VaultStatCardProps) {
                         }
                     </EmptyDescription>
                 </EmptyHeader>
-                <EmptyContent>
+                <EmptyContent className="flex flex-row justify-center gap-2">
                     <Button
                         size="sm"
                         variant={count === 0 ? "default" : "outline"}
                         onClick={() => setShowModal(true)}
                     >
+                        <IconCirclePlus />
                         {count === 0 ? "Create Vault" : "New Vault"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        onClick={() => router.push("/app/vaults")}
+                    >
+                        <IconArrowRight />
+                        View Vaults
                     </Button>
                 </EmptyContent>
             </Empty>

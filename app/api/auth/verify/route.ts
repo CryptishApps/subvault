@@ -1,10 +1,8 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createPublicClient, http } from 'viem'
-import { base } from 'viem/chains'
+import { base, baseSepolia } from 'viem/chains'
 import { generatePassword } from '@/lib/utils'
-
-const client = createPublicClient({ chain: base, transport: http() })
 
 export async function POST(request: NextRequest) {
     try {
@@ -16,7 +14,9 @@ export async function POST(request: NextRequest) {
             }, { status: 400 })
         }
 
-        console.log('Verifying signature for address:', address)
+        console.log('🔐 Verifying signature for address:', address)
+        console.log('📝 Message to verify:', message)
+        console.log('✍️  Signature:', signature)
 
         // Extract nonce from message (SIWE format)
         const nonce = message.match(/Nonce: (\w+)/)?.[1]
@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
                 error: 'Invalid message format - nonce not found'
             }, { status: 400 })
         }
+
+        // Extract chain ID from message to use correct chain
+        const chainIdMatch = message.match(/Chain ID: (\d+)/)
+        const chainId = chainIdMatch ? parseInt(chainIdMatch[1]) : 8453 // Default to Base mainnet
+        const chain = chainId === 84532 ? baseSepolia : base
+        
+        console.log('⛓️  Using chain:', chain.name, `(ID: ${chainId})`)
 
         // Check if nonce exists and is not expired in Supabase
         const supabaseAdmin = await createAdminClient()
@@ -47,7 +54,19 @@ export async function POST(request: NextRequest) {
             .delete()
             .eq('nonce', nonce)
 
+        // Create viem client with the correct chain and RPC endpoint
+        // Use environment variables for RPC URLs to avoid rate limits in production
+        const rpcUrl = chainId === 84532 
+            ? process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'
+            : process.env.BASE_RPC_URL || 'https://mainnet.base.org'
+            
+        const client = createPublicClient({ 
+            chain, 
+            transport: http(rpcUrl)
+        })
+
         // Verify the signature
+        console.log('🔍 Verifying with RPC:', rpcUrl)
         const isValid = await client.verifyMessage({
             address: address as `0x${string}`,
             message,
@@ -55,6 +74,10 @@ export async function POST(request: NextRequest) {
         })
 
         if (!isValid) {
+            console.error('❌ Signature verification failed for address:', address)
+            console.error('   Chain:', chain.name, `(ID: ${chainId})`)
+            console.error('   Message:', message)
+            console.error('   Signature:', signature)
             return NextResponse.json({
                 error: 'Invalid signature'
             }, { status: 401 })
