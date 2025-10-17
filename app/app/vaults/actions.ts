@@ -106,7 +106,7 @@ export async function checkOnboardingStatus() {
 
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
-            return { needsOnboarding: false, vaultCount: 0 }
+            return { needsOnboarding: false, vaultCount: 0, hasSubAccount: false }
         }
 
         // Fetch both profile and vault count in parallel
@@ -116,7 +116,7 @@ export async function checkOnboardingStatus() {
         ] = await Promise.all([
             supabase
                 .from("user_profiles")
-                .select("onboarding_complete")
+                .select("onboarding_complete, sub_account_address")
                 .eq("user_id", user.id)
                 .single(),
             supabase
@@ -127,11 +127,12 @@ export async function checkOnboardingStatus() {
 
         return { 
             needsOnboarding: profile ? !profile.onboarding_complete : true,
-            vaultCount: vaultCount || 0
+            vaultCount: vaultCount || 0,
+            hasSubAccount: !!profile?.sub_account_address
         }
     } catch (error) {
         console.error("Error checking onboarding status:", error)
-        return { needsOnboarding: false, vaultCount: 0 }
+        return { needsOnboarding: false, vaultCount: 0, hasSubAccount: false }
     }
 }
 

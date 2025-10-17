@@ -96,7 +96,7 @@ async function getDashboardStats() {
 
 export default async function AppPage() {
     const stats = await getDashboardStats()
-    const { needsOnboarding, vaultCount } = await checkOnboardingStatus()
+    const { needsOnboarding, vaultCount, hasSubAccount } = await checkOnboardingStatus()
     const paymentsData = await getPaymentsOverTime(undefined, 30) // All vaults, 30 days
 
     // Get network from cookie (set by AuthProvider)
@@ -105,7 +105,7 @@ export default async function AppPage() {
 
     return (
         <>
-            <OnboardingClient needsOnboarding={needsOnboarding} vaultCount={vaultCount} network={network} />
+            <OnboardingClient needsOnboarding={needsOnboarding} vaultCount={vaultCount} hasSubAccount={hasSubAccount} network={network} />
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
             
                 <div className="grid auto-rows-fr grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">

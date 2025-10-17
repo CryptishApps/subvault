@@ -22,10 +22,11 @@ import { Button } from "@/components/ui/button"
 import { CreateVaultModal } from "./create-vault"
 import { CreatePaymentModal } from "./create-payment"
 import { useOnboarding } from "../onboarding-provider"
-import { completeOnboarding, getVaults } from "@/app/app/vaults/actions"
+import { completeOnboarding, getVaults, storeSubAccount } from "@/app/app/vaults/actions"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { IconCircleKey } from "@tabler/icons-react"
+import { getBaseAccountSDK } from "@/lib/base"
 
 interface OnboardingModalProps {
     network: "base" | "base-sepolia"
@@ -38,6 +39,47 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
     const [showPaymentModal, setShowPaymentModal] = useState(false)
     const [firstVaultId, setFirstVaultId] = useState<string | undefined>()
     const [isCompleting, setIsCompleting] = useState(false)
+    const [isCreatingSubAccount, setIsCreatingSubAccount] = useState(false)
+
+    const handleCreateSubAccount = async () => {
+        setIsCreatingSubAccount(true)
+        const toastId = toast.loading("Setting up your Sub Account...")
+        
+        try {
+            const sdk = getBaseAccountSDK()
+            const subProvider = sdk.getProvider()
+            
+            // Get the sub account address (SDK auto-creates it on connect)
+            const accounts = await subProvider.request({
+                method: 'eth_accounts',
+                params: []
+            }) as string[]
+            
+            if (!accounts || accounts.length === 0) {
+                throw new Error('No accounts found. Please reconnect your wallet.')
+            }
+            
+            // First account is the sub account with defaultAccount: 'sub'
+            const subAccountAddress = accounts[0]
+            
+            // Store the sub account address in the database
+            const result = await storeSubAccount(subAccountAddress)
+            if (result.error) {
+                throw new Error(result.error)
+            }
+            
+            toast.success("Sub Account configured successfully!", { id: toastId })
+            completeStep("sub-account")
+        } catch (error) {
+            console.error("Failed to configure sub account:", error)
+            toast.error(
+                error instanceof Error ? error.message : "Failed to configure Sub Account. Please try again.",
+                { id: toastId }
+            )
+        } finally {
+            setIsCreatingSubAccount(false)
+        }
+    }
 
     const handleVaultCreated = async () => {
         setShowVaultModal(false)
@@ -128,6 +170,47 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
 
                     {/* Step Content */}
                     <div className="min-h-[300px]">
+                        {currentStep === "sub-account" && (
+                            <Empty>
+                                <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                                        </svg>
+                                    </EmptyMedia>
+                                    <EmptyTitle>Configure Your Sub Account</EmptyTitle>
+                                    <EmptyDescription>
+                                        Your Sub Account was automatically created when you connected. Let's configure it for SubVault to enable frictionless payments without repeated signing prompts.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                                <EmptyContent>
+                                    <div className="flex flex-col gap-2 w-full max-w-sm">
+                                        <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2 text-left mb-2">
+                                            <div className="flex items-start gap-3">
+                                                <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                                                <p className="text-muted-foreground text-xs">No funding required - uses your Base Account balance</p>
+                                            </div>
+                                            <div className="flex items-start gap-3">
+                                                <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                                                <p className="text-muted-foreground text-xs">Full control - manage permissions anytime</p>
+                                            </div>
+                                            <div className="flex items-start gap-3">
+                                                <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                                                <p className="text-muted-foreground text-xs">Seamless payments - no repeated approvals</p>
+                                            </div>
+                                        </div>
+                                        <Button 
+                                            onClick={handleCreateSubAccount} 
+                                            size="lg"
+                                            disabled={isCreatingSubAccount}
+                                        >
+                                            {isCreatingSubAccount ? "Configuring..." : "Configure Sub Account"}
+                                        </Button>
+                                    </div>
+                                </EmptyContent>
+                            </Empty>
+                        )}
+
                         {currentStep === "create-vault" && (
                             <Empty>
                                 <EmptyHeader>

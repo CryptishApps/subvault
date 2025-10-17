@@ -16,10 +16,10 @@ interface OnboardingContextType {
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined)
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-    const [currentStep, setCurrentStep] = useState<OnboardingStep>("create-vault")
+    const [currentStep, setCurrentStep] = useState<OnboardingStep>("sub-account")
     const [isOnboarding, setIsOnboarding] = useState(false)
     const [completedSteps, setCompletedSteps] = useState<Set<OnboardingStep>>(
-        new Set(["sub-account"]) // Sub account is pre-completed during login
+        new Set() // Start with no completed steps
     )
 
     const completeStep = (step: OnboardingStep) => {

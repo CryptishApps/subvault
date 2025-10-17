@@ -20,8 +20,6 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { storeSubAccount } from "@/app/app/vaults/actions"
-import { getBaseAccountSDK } from "@/lib/base"
 
 export function LoginForm({
     className,
@@ -99,30 +97,6 @@ export function LoginForm({
                     throw new Error('Session set failed');
                 }
                 
-                // Create and store sub account address
-                toast.loading("Setting up your account...", { id: toastId });
-                try {
-                    const sdk = getBaseAccountSDK()
-                    const subProvider = sdk.getProvider()
-                    const subAccount = await subProvider.request({
-                        method: 'wallet_addSubAccount',
-                        params: [
-                            {
-                                account: {
-                                    type: 'create',
-                                },
-                            }
-                        ],
-                    }) as { address: string }
-                    
-                    if (subAccount?.address) {
-                        await storeSubAccount(subAccount.address)
-                    }
-                } catch (subAccountError) {
-                    console.error("Failed to create sub account:", subAccountError)
-                    // Don't fail the login, just log the error
-                }
-                
                 toast.success("Successfully signed in!", { id: toastId });
                 setUser(session.user);
                 setAddress(address);
@@ -158,32 +132,6 @@ export function LoginForm({
                 const success = await setSession(supabase, session);
                 if (!success) {
                     throw new Error('Session set failed');
-                }
-                
-                // Create and store sub account address
-                toast.loading("Setting up your account...", { id: toastId });
-                try {
-                    const sdk = getBaseAccountSDK()
-                    const subProvider = sdk.getProvider()
-                    const subAccount = await subProvider.request({
-                        method: 'wallet_addSubAccount',
-                        params: [
-                            {
-                                account: {
-                                    type: 'create',
-                                },
-                            }
-                        ],
-                    }) as { address: string }
-                    
-                    if (subAccount?.address) {
-                        await storeSubAccount(subAccount.address)
-                    } else {
-                        throw new Error('Failed to create sub account');
-                    }
-                } catch (subAccountError) {
-                    console.error("Failed to create sub account:", subAccountError)
-                    // Don't fail the login, just log the error
                 }
                 
                 toast.success("Successfully signed in!", { id: toastId });

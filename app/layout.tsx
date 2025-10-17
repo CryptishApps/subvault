@@ -7,7 +7,6 @@ import { LayoutProvider } from "@/hooks/use-layout"
 import { ActiveThemeProvider } from "@/components/active-theme"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/components/auth-provider"
-import { Toaster } from "sonner"
 
 import "@/styles/globals.css"
 import { ToastWrapper } from "@/components/toast-wrapper"

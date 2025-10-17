@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils"
 import { createPaymentSeries, getVaults } from "@/app/app/vaults/actions"
 import { toast } from "sonner"
 import { useAuth } from "@/components/auth-provider"
+import { IconRefresh } from "@tabler/icons-react"
 
 const paymentSchema = z.object({
     vault_id: z.string().uuid("Please select a vault"),
@@ -131,11 +132,11 @@ export function CreatePaymentModal({
         setIsSubmitting(true)
         const numPayments = values.frequency === "none" ? 1 : values.number_of_payments
         const toastId = toast.loading(
-            numPayments === 1 
-                ? "Creating payment..." 
+            numPayments === 1
+                ? "Creating payment..."
                 : `Creating ${numPayments} payments...`
         )
-        
+
         try {
             const result = await createPaymentSeries({
                 ...values,
@@ -148,8 +149,8 @@ export function CreatePaymentModal({
             }
 
             toast.success(
-                numPayments === 1 
-                    ? "Payment created successfully!" 
+                numPayments === 1
+                    ? "Payment created successfully!"
                     : `${numPayments} payments created successfully!`,
                 { id: toastId }
             )
@@ -185,31 +186,36 @@ export function CreatePaymentModal({
                                 <FormItem>
                                     <FormLabel>Vault</FormLabel>
                                     <FormControl>
-                                        <Select
-                                            value={field.value}
-                                            onValueChange={field.onChange}
-                                            disabled={isLoadingVaults || !!preselectedVaultId}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select a vault..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {vaults.length === 0 ? (
-                                                    <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                                                        No vaults found
-                                                    </div>
-                                                ) : (
-                                                    vaults.map((vault) => (
-                                                        <SelectItem key={vault.id} value={vault.id}>
-                                                            <span className="flex items-center gap-2">
-                                                                <span>{vault.emoji}</span>
-                                                                <span>{vault.name}</span>
-                                                            </span>
-                                                        </SelectItem>
-                                                    ))
-                                                )}
-                                            </SelectContent>
-                                        </Select>
+                                        <div className="flex flex-row justify-start gap-2">
+                                            <Select
+                                                value={field.value}
+                                                onValueChange={field.onChange}
+                                                disabled={isLoadingVaults || !!preselectedVaultId}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select a vault..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {vaults.length === 0 ? (
+                                                        <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                                            No vaults found
+                                                        </div>
+                                                    ) : (
+                                                        vaults.map((vault) => (
+                                                            <SelectItem key={vault.id} value={vault.id}>
+                                                                <span className="flex items-center gap-2">
+                                                                    <span>{vault.emoji}</span>
+                                                                    <span>{vault.name}</span>
+                                                                </span>
+                                                            </SelectItem>
+                                                        ))
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button variant="ghost" onClick={loadVaults} disabled={isLoadingVaults}>
+                                                <IconRefresh className="size-4" />
+                                            </Button>
+                                        </div>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -401,9 +407,9 @@ export function CreatePaymentModal({
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting 
-                                    ? "Creating..." 
-                                    : (numberOfPayments || 1) > 1 
+                                {isSubmitting
+                                    ? "Creating..."
+                                    : (numberOfPayments || 1) > 1
                                         ? `Create ${numberOfPayments || 1} Payments`
                                         : "Create Payment"
                                 }
