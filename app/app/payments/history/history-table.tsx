@@ -129,7 +129,7 @@ export function PaymentHistoryTable({ payments }: PaymentHistoryTableProps) {
                                                     {payment.recipient_name || "Unknown"}
                                                 </span>
                                                 <a
-                                                    href={`https://basescan.org/address/${payment.recipient_address}`}
+                                                    href={payment.chain === "base" ? `https://basescan.org/address/${payment.recipient_address}` : `https://sepolia.basescan.org/address/${payment.recipient_address}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-xs text-muted-foreground hover:underline inline-flex items-center gap-1"
@@ -154,7 +154,7 @@ export function PaymentHistoryTable({ payments }: PaymentHistoryTableProps) {
                                         <TableCell>
                                             {latestTxHash ? (
                                                 <a
-                                                    href={`https://basescan.org/tx/${latestTxHash}`}
+                                                    href={payment.chain === "base" ? `https://basescan.org/tx/${latestTxHash}` : `https://sepolia.basescan.org/tx/${latestTxHash}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="text-sm text-primary hover:underline inline-flex items-center gap-1"

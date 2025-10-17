@@ -77,7 +77,7 @@ export function usePaymentHandler(
             // Send the transaction from Sub Account
             // First time: Shows "Skip further approvals" checkbox with Auto Spend Permissions
             // Subsequent: No popup, automatic execution using granted permissions
-            const response = await provider.request({
+            const callsId = await provider.request({
                 method: 'wallet_sendCalls',
                 params: [{
                     version: "2.0.0",
@@ -93,18 +93,25 @@ export function usePaymentHandler(
                         paymasterUrl,
                     },
                 }]
-            })
+            }) as string
 
-            const txHash = typeof response === 'string' ? response : (response as any)?.hash || 'unknown'
+            // Get the call status to retrieve the transaction hash
+            const status = await provider.request({
+                method: 'wallet_getCallsStatus',
+                params: [callsId]
+            }) as any
+
+            // Extract transaction hash from receipts
+            const txHash = status?.receipts?.[0]?.transactionHash
             
             // Store transaction hash in database
-            if (txHash && txHash !== 'unknown') {
+            if (txHash) {
                 await storePaymentTransaction(payment.id, txHash)
             }
 
             toast.success(`Payment sent successfully!`, { 
                 id: toastId,
-                description: txHash !== 'unknown' ? `Transaction: ${txHash.slice(0, 10)}...` : undefined
+                description: txHash ? `Transaction: ${txHash.slice(0, 10)}...` : undefined
             })
 
             // Mark payment as completed

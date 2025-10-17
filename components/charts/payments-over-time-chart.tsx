@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { TrendingUp, TrendingDown } from "lucide-react"
+import { TrendingUp, TrendingDown, BarChart3 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { format, subDays, parseISO } from "date-fns"
 
@@ -22,6 +22,13 @@ import {
     ChartLegendContent,
 } from "@/components/ui/chart"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+    Empty,
+    EmptyHeader,
+    EmptyTitle,
+    EmptyDescription,
+    EmptyMedia,
+} from "@/components/ui/empty"
 
 interface PaymentData {
     date: string
@@ -164,6 +171,9 @@ export function PaymentsOverTimeChart({
         return { total, trendPercent, isUp: trendPercent > 0 }
     }, [chartData, showVaultBreakdown])
 
+    // Check if we should show empty state
+    const isEmpty = chartData.length === 0 || stats.total === 0
+
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("en-US", {
             style: "currency",
@@ -209,51 +219,72 @@ export function PaymentsOverTimeChart({
                     </Tabs>
                 </div>
             </CardHeader>
-            <CardContent className="px-2 sm:p-6">
-                <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                    <BarChart
-                        accessibilityLayer
-                        data={chartData}
-                        margin={{ top: 20, right: 12, left: 12, bottom: 20 }}
-                    >
-                        <CartesianGrid vertical={false} />
-                        <XAxis
-                            dataKey="date"
-                            tickLine={false}
-                            axisLine={false}
-                            tickMargin={8}
-                            minTickGap={32}
-                        />
-                        <YAxis
-                            tickLine={false}
-                            axisLine={false}
-                            tickMargin={8}
-                            tickFormatter={(value) => `$${value}`}
-                        />
-                        <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                        {showVaultBreakdown && <ChartLegend content={<ChartLegendContent />} />}
-                        {showVaultBreakdown && <Bar dataKey="vault0" stackId="a" fill="var(--color-vault0)" radius={[4, 4, 0, 0]} />}
-                        {showVaultBreakdown && <Bar dataKey="vault1" stackId="a" fill="var(--color-vault1)" radius={[4, 4, 0, 0]} />}
-                        {showVaultBreakdown && <Bar dataKey="vault2" stackId="a" fill="var(--color-vault2)" radius={[4, 4, 0, 0]} />}
-                        {showVaultBreakdown && <Bar dataKey="vault3" stackId="a" fill="var(--color-vault3)" radius={[4, 4, 0, 0]} />}
-                        {showVaultBreakdown && <Bar dataKey="vault4" stackId="a" fill="var(--color-vault4)" radius={[4, 4, 0, 0]} />}
-                        {!showVaultBreakdown && <Bar dataKey="amount" fill="var(--color-amount)" radius={[4, 4, 0, 0]} />}
-                    </BarChart>
-                </ChartContainer>
-            </CardContent>
-            <CardFooter className="flex-col items-start gap-2 text-sm">
-                <div className="flex gap-2 font-medium leading-none items-center">
-                    {stats.isUp ? "Trending up" : "Trending down"} by {Math.abs(stats.trendPercent).toFixed(1)}%
-                    {stats.isUp ? (
-                        <TrendingUp className="h-4 w-4" />
-                    ) : (
-                        <TrendingDown className="h-4 w-4" />
-                    )}
-                </div>
-                <div className="leading-none text-muted-foreground">
-                    Total spent: {formatCurrency(stats.total)} over last {timeRange} days
-                </div>
-            </CardFooter>
+            {isEmpty ? (
+                <CardContent className="px-2 sm:p-6">
+                    <Empty className="min-h-[250px] border-0">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <BarChart3 />
+                            </EmptyMedia>
+                            <EmptyTitle>No payment activity</EmptyTitle>
+                            <EmptyDescription>
+                                No payments have been made in the last {timeRange} days. 
+                                {chartData.length === 0 
+                                    ? " Create your first payment to see activity here."
+                                    : " All payment amounts are currently zero."}
+                            </EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                </CardContent>
+            ) : (
+                <>
+                    <CardContent className="px-2 sm:p-6">
+                        <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                            <BarChart
+                                accessibilityLayer
+                                data={chartData}
+                                margin={{ top: 20, right: 12, left: 12, bottom: 20 }}
+                            >
+                                <CartesianGrid vertical={false} />
+                                <XAxis
+                                    dataKey="date"
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tickMargin={8}
+                                    minTickGap={32}
+                                />
+                                <YAxis
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tickMargin={8}
+                                    tickFormatter={(value) => `$${value}`}
+                                />
+                                <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                                {showVaultBreakdown && <ChartLegend content={<ChartLegendContent />} />}
+                                {showVaultBreakdown && <Bar dataKey="vault0" stackId="a" fill="var(--color-vault0)" radius={[4, 4, 0, 0]} />}
+                                {showVaultBreakdown && <Bar dataKey="vault1" stackId="a" fill="var(--color-vault1)" radius={[4, 4, 0, 0]} />}
+                                {showVaultBreakdown && <Bar dataKey="vault2" stackId="a" fill="var(--color-vault2)" radius={[4, 4, 0, 0]} />}
+                                {showVaultBreakdown && <Bar dataKey="vault3" stackId="a" fill="var(--color-vault3)" radius={[4, 4, 0, 0]} />}
+                                {showVaultBreakdown && <Bar dataKey="vault4" stackId="a" fill="var(--color-vault4)" radius={[4, 4, 0, 0]} />}
+                                {!showVaultBreakdown && <Bar dataKey="amount" fill="var(--color-amount)" radius={[4, 4, 0, 0]} />}
+                            </BarChart>
+                        </ChartContainer>
+                    </CardContent>
+                    <CardFooter className="flex-col items-start gap-2 text-sm">
+                        <div className="flex gap-2 font-medium leading-none items-center">
+                            {stats.isUp ? "Trending up" : "Trending down"} by {Math.abs(stats.trendPercent).toFixed(1)}%
+                            {stats.isUp ? (
+                                <TrendingUp className="h-4 w-4" />
+                            ) : (
+                                <TrendingDown className="h-4 w-4" />
+                            )}
+                        </div>
+                        <div className="leading-none text-muted-foreground">
+                            Total spent: {formatCurrency(stats.total)} over last {timeRange} days
+                        </div>
+                    </CardFooter>
+                </>
+            )}
         </Card>
     )
 }

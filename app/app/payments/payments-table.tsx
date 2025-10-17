@@ -223,7 +223,7 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress, sh
                                                 {payment.recipient_name || "Unknown"}
                                             </span>
                                             <a
-                                                href={`https://basescan.org/address/${payment.recipient_address}`}
+                                                href={payment.chain === "base" ? `https://basescan.org/address/${payment.recipient_address}` : `https://sepolia.basescan.org/address/${payment.recipient_address}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="text-xs text-muted-foreground hover:underline inline-flex items-center gap-1"
