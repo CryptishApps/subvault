@@ -74,10 +74,15 @@ export function LoginForm({
             };
 
             console.log("Connect response:", connectResponse);
+            console.log("Full response structure:", JSON.stringify(connectResponse, null, 2));
             const { address } = connectResponse.accounts[0];
+            
+            // Check both possible locations for SIWE data
+            const siweData = connectResponse.signInWithEthereum || (connectResponse.accounts[0] as any)?.capabilities?.signInWithEthereum;
+            console.log("SIWE data found:", siweData);
 
-            if (connectResponse.signInWithEthereum) {
-                const { message, signature } = connectResponse.signInWithEthereum;
+            if (siweData && siweData.message && siweData.signature) {
+                const { message, signature } = siweData;
                 console.log('SIWE message:', message);
                 console.log('SIWE signature:', signature);
 

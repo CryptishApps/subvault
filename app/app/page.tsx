@@ -18,6 +18,18 @@ import { cookies } from "next/headers"
 import { PaymentsOverTimeChart } from "@/components/charts/payments-over-time-chart"
 import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { formatUnits } from "viem"
+
+// Helper function to format USDC amounts (6 decimals) as currency
+function formatUSDC(amount: string): string {
+    const formatted = formatUnits(BigInt(amount), 6)
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(parseFloat(formatted))
+}
 
 async function getDashboardStats() {
     const supabase = await createClient()
@@ -26,8 +38,8 @@ async function getDashboardStats() {
     if (!user) {
         return {
             vaultsCount: 0,
-            activePaymentsCount: 0,
-            recurringPaymentsCount: 0,
+            activePaymentsSum: "0",
+            totalSpendPermissionsSum: "0",
             totalPaymentsCount: 0,
         }
     }
@@ -36,6 +48,7 @@ async function getDashboardStats() {
     const [
         { count: vaultsCount },
         { data: activePayments },
+        { data: vaults },
         { count: totalPaymentsCount },
     ] = await Promise.all([
         // Get vaults count
@@ -44,10 +57,16 @@ async function getDashboardStats() {
             .select("*", { count: "exact", head: true })
             .eq("user_id", user.id),
 
-        // Get active payments view
+        // Get active payments with amounts
         supabase
             .from("active_payments_view")
-            .select("id, is_recurring")
+            .select("amount")
+            .eq("user_id", user.id),
+
+        // Get all vaults with their spending permissions
+        supabase
+            .from("vaults")
+            .select("vault_allowance")
             .eq("user_id", user.id),
 
         // Get total payments count
@@ -57,12 +76,20 @@ async function getDashboardStats() {
             .eq("user_id", user.id)
     ])
 
-    const recurringCount = activePayments?.filter(p => p.is_recurring).length || 0
+    // Sum all active payment amounts
+    const activePaymentsSum = activePayments?.reduce((sum, payment) => {
+        return sum + BigInt(payment.amount || "0")
+    }, BigInt(0)) || BigInt(0)
+
+    // Sum all vault spending permissions
+    const totalSpendPermissionsSum = vaults?.reduce((sum, vault) => {
+        return sum + BigInt(vault.vault_allowance || "0")
+    }, BigInt(0)) || BigInt(0)
 
     return {
         vaultsCount: vaultsCount || 0,
-        activePaymentsCount: activePayments?.length || 0,
-        recurringPaymentsCount: recurringCount,
+        activePaymentsSum: activePaymentsSum.toString(),
+        totalSpendPermissionsSum: totalSpendPermissionsSum.toString(),
         totalPaymentsCount: totalPaymentsCount || 0,
     }
 }
@@ -88,7 +115,7 @@ export default async function AppPage() {
                         <CardHeader>
                             <CardDescription>Active Payments</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                {stats.activePaymentsCount}
+                                {formatUSDC(stats.activePaymentsSum)}
                             </CardTitle>
                             <CardAction>
                                 <IconShield className="size-5" />
@@ -96,10 +123,10 @@ export default async function AppPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="line-clamp-1 flex gap-2 font-medium text-sm">
-                                Active spend permissions
+                                Total active payment amounts
                             </div>
                             <div className="text-muted-foreground text-sm">
-                                Automatic payment schedules
+                                Sum of all scheduled payments
                             </div>
                         </CardContent>
                         <CardFooter className="flex-col items-start gap-1.5 text-sm">
@@ -112,9 +139,9 @@ export default async function AppPage() {
 
                     <Card className="@container/card">
                         <CardHeader>
-                            <CardDescription>Recurring Payments</CardDescription>
+                            <CardDescription>Spending Permissions</CardDescription>
                             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                                {stats.recurringPaymentsCount}
+                                {formatUSDC(stats.totalSpendPermissionsSum)}
                             </CardTitle>
                             <CardAction>
                                 <Repeat className="size-5" />
@@ -122,16 +149,16 @@ export default async function AppPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="line-clamp-1 flex gap-2 font-medium text-sm">
-                                Automatic recurring
+                                Total permissions granted
                             </div>
                             <div className="text-muted-foreground text-sm">
-                                Subscriptions and regular payments
+                                Sum of all vault allowances
                             </div>
                         </CardContent>
                         <CardFooter className="flex-col items-start gap-1.5 text-sm">
                             <Button variant="link" size="sm" className="text-foreground hover:text-foreground">
                                 <IconRepeat className="size-4" />
-                                Manage Recurring
+                                Manage Permissions
                             </Button>
                         </CardFooter>
                     </Card>

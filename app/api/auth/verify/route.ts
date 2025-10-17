@@ -4,6 +4,11 @@ import { createPublicClient, http } from 'viem'
 import { base, baseSepolia } from 'viem/chains'
 import { generatePassword } from '@/lib/utils'
 
+// Create viem clients at module level (as per Base documentation)
+// https://docs.base.org/base-account/guides/authenticate-users
+const baseClient = createPublicClient({ chain: base, transport: http() })
+const baseSepoliaClient = createPublicClient({ chain: baseSepolia, transport: http() })
+
 export async function POST(request: NextRequest) {
     try {
         const { address, message, signature } = await request.json()
@@ -29,9 +34,9 @@ export async function POST(request: NextRequest) {
         // Extract chain ID from message to use correct chain
         const chainIdMatch = message.match(/Chain ID: (\d+)/)
         const chainId = chainIdMatch ? parseInt(chainIdMatch[1]) : 8453 // Default to Base mainnet
-        const chain = chainId === 84532 ? baseSepolia : base
+        const client = chainId === 84532 ? baseSepoliaClient : baseClient
         
-        console.log('⛓️  Using chain:', chain.name, `(ID: ${chainId})`)
+        console.log('⛓️  Using chain:', chainId === 84532 ? 'Base Sepolia' : 'Base', `(ID: ${chainId})`)
 
         // Check if nonce exists and is not expired in Supabase
         const supabaseAdmin = await createAdminClient()
@@ -54,30 +59,32 @@ export async function POST(request: NextRequest) {
             .delete()
             .eq('nonce', nonce)
 
-        // Create viem client with the correct chain and RPC endpoint
-        // Use environment variables for RPC URLs to avoid rate limits in production
-        const rpcUrl = chainId === 84532 
-            ? process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'
-            : process.env.BASE_RPC_URL || 'https://mainnet.base.org'
-            
-        const client = createPublicClient({ 
-            chain, 
-            transport: http(rpcUrl)
-        })
-
-        // Verify the signature
-        console.log('🔍 Verifying with RPC:', rpcUrl)
-        const isValid = await client.verifyMessage({
-            address: address as `0x${string}`,
-            message,
-            signature: signature as `0x${string}`
-        })
+        // Check if smart contract wallet
+        const bytecode = await client.getBytecode({ address: address as `0x${string}` })
+        const isDeployed = bytecode !== undefined && bytecode !== '0x'
+        console.log('📦 Contract deployed:', isDeployed)
+        
+        // Verify the signature (viem handles ERC-6492 and ERC-1271 automatically)
+        console.log('🔍 Verifying signature...')
+        let isValid = false
+        try {
+            isValid = await client.verifyMessage({
+                address: address as `0x${string}`,
+                message,
+                signature: signature as `0x${string}`
+            })
+            console.log('✅ Verification result:', isValid)
+        } catch (error) {
+            console.error('❌ Verification error:', error)
+            console.error('   Error details:', JSON.stringify(error, null, 2))
+        }
 
         if (!isValid) {
             console.error('❌ Signature verification failed for address:', address)
-            console.error('   Chain:', chain.name, `(ID: ${chainId})`)
+            console.error('   Chain:', chainId === 84532 ? 'Base Sepolia' : 'Base', `(ID: ${chainId})`)
+            console.error('   Contract deployed:', isDeployed)
             console.error('   Message:', message)
-            console.error('   Signature:', signature)
+            console.error('   Signature:', signature.substring(0, 100) + '...')
             return NextResponse.json({
                 error: 'Invalid signature'
             }, { status: 401 })
