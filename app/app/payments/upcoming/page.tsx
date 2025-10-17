@@ -19,7 +19,7 @@ export default async function UpcomingPaymentsPage() {
             <PaymentsTable 
                 payments={paymentsResult.data || []} 
                 subAccountAddress={subAccountResult.data || null}
-                showCreateButton={true}
+                showCreateButton={false}
             />
         </Suspense>
     )

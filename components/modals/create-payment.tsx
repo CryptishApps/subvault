@@ -75,6 +75,7 @@ export function CreatePaymentModal({
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [vaults, setVaults] = useState<Vault[]>([])
     const [isLoadingVaults, setIsLoadingVaults] = useState(true)
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
     const form = useForm({
         resolver: zodResolver(paymentSchema),
@@ -97,11 +98,13 @@ export function CreatePaymentModal({
         setIsLoadingVaults(true)
         try {
             const result = await getVaults()
+            console.log('result', result)
             if (result.error) {
                 toast.error(result.error)
                 return
             }
             setVaults(result.data || [])
+            setIsLoadingVaults(false)
         } catch (error) {
             toast.error("Failed to load vaults")
         } finally {
@@ -285,7 +288,7 @@ export function CreatePaymentModal({
                             render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <FormLabel>Start Date</FormLabel>
-                                    <Popover>
+                                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                                         <PopoverTrigger asChild>
                                             <FormControl>
                                                 <Button
@@ -308,7 +311,12 @@ export function CreatePaymentModal({
                                             <Calendar
                                                 mode="single"
                                                 selected={field.value}
-                                                onSelect={field.onChange}
+                                                onSelect={(date) => {
+                                                    if (date) {
+                                                        field.onChange(date)
+                                                        setIsCalendarOpen(false)
+                                                    }
+                                                }}
                                                 disabled={(date) =>
                                                     date < new Date(new Date().setHours(0, 0, 0, 0))
                                                 }

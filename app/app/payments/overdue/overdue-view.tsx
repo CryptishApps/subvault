@@ -1,10 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { PaymentsTable } from "../payments-table"
-import { CreatePaymentModal } from "@/components/modals/create-payment"
 
 interface Payment {
     id: string
@@ -32,8 +28,6 @@ interface OverduePaymentsViewProps {
 }
 
 export function OverduePaymentsView({ initialPayments, subAccountAddress }: OverduePaymentsViewProps) {
-    const [showCreateModal, setShowCreateModal] = useState(false)
-
     return (
         <div className="space-y-6">
             {initialPayments.length > 0 ? (
@@ -45,21 +39,8 @@ export function OverduePaymentsView({ initialPayments, subAccountAddress }: Over
             ) : (
                 <div className="flex h-64 flex-col items-center justify-center gap-3 text-center rounded-md border border-dashed">
                     <p className="text-sm text-muted-foreground">No overdue payments</p>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setShowCreateModal(true)}
-                    >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Payment
-                    </Button>
                 </div>
             )}
-
-            <CreatePaymentModal
-                open={showCreateModal}
-                onOpenChange={setShowCreateModal}
-            />
         </div>
     )
 }

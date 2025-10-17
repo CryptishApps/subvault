@@ -167,9 +167,15 @@ export async function getVaults() {
     try {
         const supabase = await createClient()
 
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return { error: "Unauthorized" }
+        }
+
         const { data, error } = await supabase
             .from("vaults")
             .select("*")
+            .eq("user_id", user.id)
             .order("created_at", { ascending: false })
 
         if (error) {

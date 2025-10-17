@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Check } from "lucide-react"
 import {
@@ -27,6 +27,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { IconCircleKey } from "@tabler/icons-react"
 import { getBaseAccountSDK } from "@/lib/base"
+import { useAuth } from "../auth-provider"
 
 interface OnboardingModalProps {
     network: "base" | "base-sepolia"
@@ -34,6 +35,7 @@ interface OnboardingModalProps {
 
 export function OnboardingModal({ network }: OnboardingModalProps) {
     const router = useRouter()
+    const { address } = useAuth()
     const { currentStep, isOnboarding, setIsOnboarding, completeStep, completedSteps } = useOnboarding()
     const [showVaultModal, setShowVaultModal] = useState(false)
     const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -41,33 +43,32 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
     const [isCompleting, setIsCompleting] = useState(false)
     const [isCreatingSubAccount, setIsCreatingSubAccount] = useState(false)
 
-    const handleCreateSubAccount = async () => {
+    const handleCreateSubAccount = useCallback(async () => {
         setIsCreatingSubAccount(true)
         const toastId = toast.loading("Setting up your Sub Account...")
-        
+
         try {
             const sdk = getBaseAccountSDK()
             const subProvider = sdk.getProvider()
-            
-            // Get the sub account address (SDK auto-creates it on connect)
-            const accounts = await subProvider.request({
-                method: 'eth_accounts',
-                params: []
-            }) as string[]
-            
-            if (!accounts || accounts.length === 0) {
-                throw new Error('No accounts found. Please reconnect your wallet.')
+
+            const { subAccounts: [subAccount] } = await subProvider.request({
+                method: 'wallet_getSubAccounts',
+                params: [{
+                    account: address,
+                    domain: window.location.origin,
+                }]
+            }) as { subAccounts: { address: string }[] }
+
+            if (!subAccount) {
+                throw new Error('No sub account found. Please reconnect your wallet.')
             }
-            
-            // First account is the sub account with defaultAccount: 'sub'
-            const subAccountAddress = accounts[0]
-            
+
             // Store the sub account address in the database
-            const result = await storeSubAccount(subAccountAddress)
+            const result = await storeSubAccount(subAccount.address)
             if (result.error) {
                 throw new Error(result.error)
             }
-            
+
             toast.success("Sub Account configured successfully!", { id: toastId })
             completeStep("sub-account")
         } catch (error) {
@@ -79,12 +80,12 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
         } finally {
             setIsCreatingSubAccount(false)
         }
-    }
+    }, [address])
 
     const handleVaultCreated = async () => {
         setShowVaultModal(false)
         completeStep("create-vault")
-        
+
         // Load the first vault to pre-select for payment creation
         try {
             const result = await getVaults()
@@ -128,12 +129,12 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
 
     return (
         <>
-             <Dialog open={isOnboarding} onOpenChange={() => { }} modal={true}>
-                 <DialogContent
-                     className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto [&>button]:hidden bg-background text-foreground theme-container"
-                     onPointerDownOutside={(e) => e.preventDefault()}
-                     onEscapeKeyDown={(e) => e.preventDefault()}
-                 >
+            <Dialog open={isOnboarding} onOpenChange={() => { }} modal={true}>
+                <DialogContent
+                    className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto [&>button]:hidden bg-background text-foreground theme-container"
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                    onEscapeKeyDown={(e) => e.preventDefault()}
+                >
                     <DialogHeader>
                         <DialogTitle>Welcome to SubVault</DialogTitle>
                         <DialogDescription>
@@ -152,7 +153,7 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
                                             : currentStep === step.id
                                                 ? "border-primary text-primary"
                                                 : "border-muted-foreground/30 text-muted-foreground"
-                                            )}
+                                        )}
                                     >
                                         {step.completed ? <Check className="h-5 w-5" /> : index + 1}
                                     </div>
@@ -199,8 +200,8 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
                                                 <p className="text-muted-foreground text-xs">Seamless payments - no repeated approvals</p>
                                             </div>
                                         </div>
-                                        <Button 
-                                            onClick={handleCreateSubAccount} 
+                                        <Button
+                                            onClick={handleCreateSubAccount}
                                             size="lg"
                                             disabled={isCreatingSubAccount}
                                         >
@@ -309,7 +310,6 @@ export function OnboardingModal({ network }: OnboardingModalProps) {
                 open={showPaymentModal}
                 onOpenChange={setShowPaymentModal}
                 onSuccess={handlePaymentCreated}
-                preselectedVaultId={firstVaultId}
             />
         </>
     )

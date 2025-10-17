@@ -1,23 +1,39 @@
 "use client"
 
-import { ReactNode } from "react"
+import { ReactNode, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { CreatePaymentModal } from "@/components/modals/create-payment"
 
 export default function PaymentsLayout({ children }: { children: ReactNode }) {
+    const [showCreateModal, setShowCreateModal] = useState(false)
+
     return (
         <div className="flex flex-col gap-6 p-6">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-                <p className="text-muted-foreground">
-                    Manage your scheduled and completed payments
-                </p>
+            <div className="flex items-start justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
+                    <p className="text-muted-foreground">
+                        Manage your scheduled and completed payments
+                    </p>
+                </div>
+                <Button onClick={() => setShowCreateModal(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Payment
+                </Button>
             </div>
 
             <PaymentsNav />
 
             {children}
+
+            <CreatePaymentModal
+                open={showCreateModal}
+                onOpenChange={setShowCreateModal}
+            />
         </div>
     )
 }
