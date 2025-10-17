@@ -36,7 +36,7 @@ const items = [
     },
     {
         name: "Payments",
-        url: "/app/payments",
+        url: "/app/payments/overdue",
         icon: IconCreditCard,
     }
 ]

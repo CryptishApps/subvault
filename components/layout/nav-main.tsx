@@ -1,6 +1,6 @@
 "use client"
 
-import { IconCircleKey, IconShield } from "@tabler/icons-react"
+import { IconCircleKey, IconLocationDollar } from "@tabler/icons-react"
 
 import {
     SidebarGroup,
@@ -26,8 +26,8 @@ const items = [
     },
     {
         title: "Payments",
-        url: "/app/payments",
-        icon: IconShield,
+        url: "/app/payments/overdue",
+        icon: IconLocationDollar,
     }
 ]
 

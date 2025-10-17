@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { createBaseAccountSDK } from '@base-org/account';
-import { formatUnits } from 'viem';
+import { createPublicClient, http, formatUnits } from 'viem';
+import { base, baseSepolia } from 'viem/chains';
 
 // USDC contract addresses on Base networks
 const USDC_CONTRACTS = {
     'base': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+} as const;
+
+// Chain configurations
+const CHAINS = {
+    'base': base,
+    'base-sepolia': baseSepolia,
 } as const;
 
 interface WalletBalances {
@@ -52,47 +58,44 @@ export function useWalletBalances(): WalletBalances {
 
                 setBalances(prev => ({ ...prev, loading: true, error: null }));
 
-                const sdk = createBaseAccountSDK({
-                    appName: 'SubVault',
-                    appLogoUrl: 'https://base.org/logo.png',
+                // Create a public client for the specific chain we want to query
+                const chain = CHAINS[network];
+                const publicClient = createPublicClient({
+                    chain,
+                    transport: http(),
                 });
-                const provider = sdk.getProvider();
 
-                // Prepare USDC balance call data
                 const usdcContractAddress = USDC_CONTRACTS[network];
-                const addressWithoutPrefix = currentAddress.startsWith('0x') ? currentAddress.slice(2) : currentAddress;
-                const paddedAddress = addressWithoutPrefix.padStart(64, '0');
-                const data = `0x70a08231${paddedAddress}`;
 
-                // Fetch both balances in parallel using Promise.all
-                const [ethBalanceHex, usdcBalanceHex] = await Promise.all([
-                    // Fetch ETH balance using eth_getBalance
-                    provider.request({
-                        method: 'eth_getBalance',
-                        params: [currentAddress, 'latest'],
-                    }) as Promise<string>,
-                    // Fetch USDC balance using eth_call
-                    // Call balanceOf(address) function - function selector: 0x70a08231
-                    provider.request({
-                        method: 'eth_call',
-                        params: [
-                            {
-                                to: usdcContractAddress,
-                                data,
-                            },
-                            'latest',
-                        ],
-                    }) as Promise<string>,
+                // Fetch both balances in parallel using the chain-specific public client
+                const [ethBalance, usdcBalance] = await Promise.all([
+                    // Fetch ETH balance
+                    publicClient.getBalance({
+                        address: currentAddress as `0x${string}`,
+                    }),
+                    // Fetch USDC balance - call balanceOf(address) function
+                    publicClient.readContract({
+                        address: usdcContractAddress as `0x${string}`,
+                        abi: [{
+                            name: 'balanceOf',
+                            type: 'function',
+                            stateMutability: 'view',
+                            inputs: [{ name: 'account', type: 'address' }],
+                            outputs: [{ type: 'uint256' }],
+                        }],
+                        functionName: 'balanceOf',
+                        args: [currentAddress as `0x${string}`],
+                    }) as Promise<bigint>,
                 ]);
 
                 // Format balances
-                const ethBalance = formatUnits(BigInt(ethBalanceHex), 18);
-                const usdcBalance = formatUnits(BigInt(usdcBalanceHex), 6); // USDC has 6 decimals
+                const ethBalanceFormatted = formatUnits(ethBalance, 18);
+                const usdcBalanceFormatted = formatUnits(usdcBalance, 6);
 
                 if (isMounted) {
                     setBalances({
-                        eth: parseFloat(ethBalance).toFixed(4),
-                        usdc: parseFloat(usdcBalance).toFixed(2),
+                        eth: parseFloat(ethBalanceFormatted).toFixed(4),
+                        usdc: parseFloat(usdcBalanceFormatted).toFixed(2),
                         loading: false,
                         error: null,
                     });

@@ -31,18 +31,23 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { createPayment, type CreatePaymentInput, getVaults } from "@/app/app/vaults/actions"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
+import { createPaymentSeries, getVaults } from "@/app/app/vaults/actions"
 import { toast } from "sonner"
+import { useAuth } from "@/components/auth-provider"
 
 const paymentSchema = z.object({
     vault_id: z.string().uuid("Please select a vault"),
     recipient_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address"),
     recipient_name: z.string().optional(),
     amount: z.string().min(1, "Amount is required"),
-    is_recurring: z.boolean().default(false),
-    frequency_seconds: z.number().optional(),
-    execution_mode: z.enum(["auto", "manual"]).default("auto"),
+    start_date: z.date(),
+    frequency: z.enum(["none", "daily", "weekly", "monthly", "yearly"]).default("none"),
+    number_of_payments: z.number().min(1, "Must be at least 1").max(100, "Maximum 100 payments").default(1),
     description: z.string().optional(),
 })
 
@@ -65,6 +70,7 @@ export function CreatePaymentModal({
     onSuccess,
     preselectedVaultId,
 }: CreatePaymentModalProps) {
+    const { network } = useAuth()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [vaults, setVaults] = useState<Vault[]>([])
     const [isLoadingVaults, setIsLoadingVaults] = useState(true)
@@ -76,14 +82,15 @@ export function CreatePaymentModal({
             recipient_address: "",
             recipient_name: "",
             amount: "",
-            is_recurring: false,
-            frequency_seconds: undefined,
-            execution_mode: "auto" as const,
+            start_date: new Date(),
+            frequency: "none" as const,
+            number_of_payments: 1,
             description: "",
         },
     })
 
-    const isRecurring = form.watch("is_recurring")
+    const frequency = form.watch("frequency")
+    const numberOfPayments = form.watch("number_of_payments")
 
     async function loadVaults() {
         setIsLoadingVaults(true)
@@ -113,22 +120,39 @@ export function CreatePaymentModal({
         }
     }, [preselectedVaultId, form])
 
+    // Reset number_of_payments to 1 when frequency is "none"
+    useEffect(() => {
+        if (frequency === "none") {
+            form.setValue("number_of_payments", 1)
+        }
+    }, [frequency, form])
+
     async function onSubmit(values: z.infer<typeof paymentSchema>) {
         setIsSubmitting(true)
-        const toastId = toast.loading("Creating payment...")
+        const numPayments = values.frequency === "none" ? 1 : values.number_of_payments
+        const toastId = toast.loading(
+            numPayments === 1 
+                ? "Creating payment..." 
+                : `Creating ${numPayments} payments...`
+        )
         
         try {
-            const result = await createPayment({
+            const result = await createPaymentSeries({
                 ...values,
-                frequency_seconds: values.is_recurring ? values.frequency_seconds : undefined,
-            } as CreatePaymentInput)
+                chain: network,
+            })
 
             if (result.error) {
                 toast.error(result.error, { id: toastId })
                 return
             }
 
-            toast.success("Payment created successfully!", { id: toastId })
+            toast.success(
+                numPayments === 1 
+                    ? "Payment created successfully!" 
+                    : `${numPayments} payments created successfully!`,
+                { id: toastId }
+            )
             form.reset()
             onOpenChange(false)
             onSuccess?.()
@@ -146,9 +170,9 @@ export function CreatePaymentModal({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto theme-container">
                 <DialogHeader>
-                    <DialogTitle>Create Payment</DialogTitle>
+                    <DialogTitle>Create Payment{(numberOfPayments || 1) > 1 && "s"}</DialogTitle>
                     <DialogDescription>
-                        Set up a one-time or recurring payment. No additional signatures needed!
+                        Schedule a single payment or create multiple payments at once.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -199,7 +223,10 @@ export function CreatePaymentModal({
                                 <FormItem>
                                     <FormLabel>Recipient Address</FormLabel>
                                     <FormControl>
-                                        <Input {...field} placeholder="0x..." />
+                                        <Input
+                                            placeholder="0x..."
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -211,9 +238,12 @@ export function CreatePaymentModal({
                             name="recipient_name"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Recipient Name (optional)</FormLabel>
+                                    <FormLabel>Recipient Name (Optional)</FormLabel>
                                     <FormControl>
-                                        <Input {...field} placeholder="e.g., Designer, Tool Subscription" />
+                                        <Input
+                                            placeholder="e.g., Freelancer, Service Provider"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -227,10 +257,16 @@ export function CreatePaymentModal({
                                 <FormItem>
                                     <FormLabel>Amount (USDC)</FormLabel>
                                     <FormControl>
-                                        <Input {...field} type="number" step="0.01" placeholder="100.00" />
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="100.00"
+                                            {...field}
+                                        />
                                     </FormControl>
                                     <FormDescription>
-                                        Enter the amount in USDC (e.g., 100 for $100)
+                                        Amount in USDC per payment
                                     </FormDescription>
                                     <FormMessage />
                                 </FormItem>
@@ -239,51 +275,98 @@ export function CreatePaymentModal({
 
                         <FormField
                             control={form.control}
-                            name="is_recurring"
+                            name="start_date"
                             render={({ field }) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                                    <div className="space-y-0.5">
-                                        <FormLabel className="text-base">
-                                            Recurring Payment
-                                        </FormLabel>
-                                        <FormDescription>
-                                            Automatically execute this payment on a schedule
-                                        </FormDescription>
-                                    </div>
-                                    <FormControl>
-                                        <Switch
-                                            checked={field.value}
-                                            onCheckedChange={field.onChange}
-                                        />
-                                    </FormControl>
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Start Date</FormLabel>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn(
+                                                        "w-full pl-3 text-left font-normal",
+                                                        !field.value && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    {field.value ? (
+                                                        format(field.value, "PPP")
+                                                    ) : (
+                                                        <span>Pick a date</span>
+                                                    )}
+                                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar
+                                                mode="single"
+                                                selected={field.value}
+                                                onSelect={field.onChange}
+                                                disabled={(date) =>
+                                                    date < new Date(new Date().setHours(0, 0, 0, 0))
+                                                }
+                                                initialFocus
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormDescription>
+                                        Date of the first payment
+                                    </FormDescription>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
 
-                        {isRecurring && (
+                        <FormField
+                            control={form.control}
+                            name="frequency"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Frequency</FormLabel>
+                                    <FormControl>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select frequency..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">One-time only</SelectItem>
+                                                <SelectItem value="daily">Daily</SelectItem>
+                                                <SelectItem value="weekly">Weekly</SelectItem>
+                                                <SelectItem value="monthly">Monthly</SelectItem>
+                                                <SelectItem value="yearly">Yearly</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormControl>
+                                    <FormDescription>
+                                        How often to schedule payments
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        {frequency !== "none" && (
                             <FormField
                                 control={form.control}
-                                name="frequency_seconds"
+                                name="number_of_payments"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Frequency</FormLabel>
+                                        <FormLabel>Number of Payments</FormLabel>
                                         <FormControl>
-                                            <Select
-                                                value={field.value?.toString()}
-                                                onValueChange={(val) => field.onChange(parseInt(val))}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select frequency..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="86400">Daily</SelectItem>
-                                                    <SelectItem value="604800">Weekly</SelectItem>
-                                                    <SelectItem value="2592000">Monthly (30 days)</SelectItem>
-                                                    <SelectItem value="7776000">Quarterly (90 days)</SelectItem>
-                                                    <SelectItem value="31536000">Yearly (365 days)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                            <Input
+                                                type="number"
+                                                min={1}
+                                                max={100}
+                                                placeholder="12"
+                                                {...field}
+                                                value={field.value}
+                                                onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                                            />
                                         </FormControl>
+                                        <FormDescription>
+                                            Total number of payments to create (1-100)
+                                        </FormDescription>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -292,44 +375,15 @@ export function CreatePaymentModal({
 
                         <FormField
                             control={form.control}
-                            name="execution_mode"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Execution Mode</FormLabel>
-                                    <FormControl>
-                                        <Select value={field.value} onValueChange={field.onChange}>
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="auto">
-                                                    Automatic - Execute automatically when due
-                                                </SelectItem>
-                                                <SelectItem value="manual">
-                                                    Manual - You click to pay when ready
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormControl>
-                                    <FormDescription>
-                                        With Sub Accounts, no signature needed either way!
-                                    </FormDescription>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
                             name="description"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Description (optional)</FormLabel>
+                                    <FormLabel>Description (Optional)</FormLabel>
                                     <FormControl>
                                         <Textarea
-                                            {...field}
-                                            placeholder="Add any notes about this payment..."
+                                            placeholder="Add notes about this payment..."
                                             className="resize-none"
+                                            {...field}
                                         />
                                     </FormControl>
                                     <FormMessage />
@@ -347,7 +401,12 @@ export function CreatePaymentModal({
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? "Creating..." : "Create Payment"}
+                                {isSubmitting 
+                                    ? "Creating..." 
+                                    : (numberOfPayments || 1) > 1 
+                                        ? `Create ${numberOfPayments || 1} Payments`
+                                        : "Create Payment"
+                                }
                             </Button>
                         </DialogFooter>
                     </form>
@@ -356,4 +415,3 @@ export function CreatePaymentModal({
         </Dialog>
     )
 }
-

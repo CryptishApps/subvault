@@ -31,7 +31,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [address, setAddress] = useState<string | null>(null);
-    const [network, setNetwork] = useState<'base' | 'base-sepolia'>('base');
+    const [network, setNetwork] = useState<'base' | 'base-sepolia'>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('treasury_network');
+            return (saved === 'base' || saved === 'base-sepolia') ? saved : 'base-sepolia';
+        }
+        return 'base-sepolia';
+    });
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -41,6 +47,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.refresh();
     }
 
+    // Persist network to localStorage whenever it changes
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('treasury_network', network);
+        }
+    }, [network]);
+
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             setUser(session?.user || null);
@@ -48,13 +61,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setAddress(session?.user?.user_metadata.ethereum_address || null);
             setLoading(false);
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                console.log('Signed in');
                 if (pathname === "/") {
                     router.push('/app');
                 }
                 router.refresh();
             } else if (event === 'SIGNED_OUT') {
-                console.log('Signed out');
                 if (pathname !== "/") {
                     router.push('/');
                 }

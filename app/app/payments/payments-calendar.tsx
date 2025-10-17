@@ -1,8 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useCallback, useState } from "react"
-import { Trash2, ArrowUpRight, Send } from "lucide-react"
+import { useState } from "react"
+import { Trash2, ArrowUpRight, Send, Plus } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,11 +18,11 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { deletePayment, updatePaymentExecutionDate } from "../vaults/actions"
+import { deletePayment } from "../vaults/actions"
 import { toast } from "sonner"
-import { format, isSameDay, addSeconds } from "date-fns"
-import { getBaseAccountSDK } from "@/lib/base"
+import { format, isSameDay } from "date-fns"
 import { useAuth } from "@/components/auth-provider"
+import { usePaymentHandler, getPaymentButtonText } from "./use-payment-handler"
 
 interface Payment {
     id: string
@@ -30,13 +30,12 @@ interface Payment {
     recipient_address: string
     recipient_name: string | null
     amount: string
-    is_recurring: boolean
-    frequency_seconds: number | null
     next_execution_date: string | null
-    execution_mode: string
     status: string
     description: string | null
     created_at: string
+    series_id: string | null
+    chain: string
     vault: {
         id: string
         name: string
@@ -48,15 +47,26 @@ interface Payment {
 interface PaymentsCalendarProps {
     payments: Payment[]
     subAccountAddress: string | null
+    showCreateButton?: boolean
+    onCreateClick?: () => void
 }
 
-export function PaymentsCalendar({ payments: initialPayments, subAccountAddress }: PaymentsCalendarProps) {
+export function PaymentsCalendar({ payments: initialPayments, subAccountAddress, showCreateButton = false, onCreateClick }: PaymentsCalendarProps) {
     const { network } = useAuth()
     const [date, setDate] = useState<Date | undefined>(new Date())
     const [payments, setPayments] = useState<Payment[]>(initialPayments)
     const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
-    const [payingPaymentId, setPayingPaymentId] = useState<string | null>(null)
+
+    const { handlePayNow, payingPaymentId } = usePaymentHandler(
+        subAccountAddress,
+        network,
+        (paymentId, updates) => {
+            setPayments(prev => prev.map(p => 
+                p.id === paymentId ? { ...p, ...updates } : p
+            ))
+        }
+    )
 
     // Get all dates that have payments
     const paymentDates = payments
@@ -108,75 +118,6 @@ export function PaymentsCalendar({ payments: initialPayments, subAccountAddress 
         }
     }
 
-    const handlePayNow = useCallback(async (payment: Payment) => {
-        if (!subAccountAddress) {
-            toast.error("Sub account not found. Please reconnect your wallet.")
-            return
-        }
-
-        setPayingPaymentId(payment.id)
-        const toastId = toast.loading("Processing payment...")
-
-        try {
-            // Get the Base Account SDK provider
-            const sdk = getBaseAccountSDK()
-            const provider = sdk.getProvider()
-
-            // Convert amount to hex (already in smallest unit - USDC has 6 decimals)
-            const amountHex = `0x${BigInt(payment.amount).toString(16)}`
-
-            // Send the payment using wallet_sendCalls
-            // Paymaster is configured at SDK level, so no need to pass it here
-            const callsId = await provider.request({
-                method: 'wallet_sendCalls',
-                params: [{
-                    version: "2.0",
-                    atomicRequired: true,
-                    chainId: `0x${(network === 'base' ? 8453 : 84532).toString(16)}`, // Base Sepolia (0x14a34) - change to 8453 (0x2105) for mainnet
-                    from: subAccountAddress,
-                    calls: [{
-                        to: payment.recipient_address,
-                        data: '0x', // Empty data for simple transfer
-                        value: amountHex,
-                    }],
-                }]
-            }) as string
-
-            toast.success(`Payment sent! Calls ID: ${callsId}`, { id: toastId })
-
-            // Update the payment's next execution date if recurring
-            if (payment.is_recurring && payment.frequency_seconds) {
-                const nextDate = addSeconds(new Date(), payment.frequency_seconds)
-                await updatePaymentExecutionDate(payment.id, nextDate.toISOString())
-                
-                // Update local state
-                setPayments(prev => prev.map(p => 
-                    p.id === payment.id 
-                        ? { ...p, next_execution_date: nextDate.toISOString() }
-                        : p
-                ))
-            } else {
-                // For one-time payments, set next_execution_date to null
-                await updatePaymentExecutionDate(payment.id, null)
-                
-                // Update local state
-                setPayments(prev => prev.map(p => 
-                    p.id === payment.id 
-                        ? { ...p, next_execution_date: null, status: 'completed' }
-                        : p
-                ))
-            }
-        } catch (error) {
-            console.error("Payment failed:", error)
-            toast.error(
-                error instanceof Error ? error.message : "Payment failed. Please try again.",
-                { id: toastId }
-            )
-        } finally {
-            setPayingPaymentId(null)
-        }
-    }, [subAccountAddress, network])
-
     return (
         <>
             <Card className="gap-0 p-0 w-auto">
@@ -216,57 +157,37 @@ export function PaymentsCalendar({ payments: initialPayments, subAccountAddress 
                         <ScrollArea className="flex-1 md:max-h-[calc(100vh-300px)]">
                             <div className="flex flex-col gap-3 p-6">
                                 {selectedDatePayments.length === 0 ? (
-                                    <div className="flex h-32 items-center justify-center text-center text-sm text-muted-foreground">
-                                        No payments scheduled for this date
+                                    <div className="flex h-32 flex-col items-center justify-center gap-3 text-center">
+                                        <p className="text-sm text-muted-foreground">
+                                            {payments.length === 0 ? "No payments found" : "No payments scheduled for this date"}
+                                        </p>
+                                        {showCreateButton && payments.length === 0 && onCreateClick && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={onCreateClick}
+                                            >
+                                                <Plus className="mr-2 h-4 w-4" />
+                                                Create Payment
+                                            </Button>
+                                        )}
                                     </div>
                                 ) : (
                                     selectedDatePayments.map((payment) => (
                                         <Card key={payment.id} className="p-4">
                                             <div className="space-y-3">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xl">
-                                                            {payment.vault?.emoji}
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">
+                                                        {payment.vault?.emoji}
+                                                    </span>
+                                                    <div className="flex flex-col flex-1 min-w-0">
+                                                        <span className="text-sm font-medium">
+                                                            {payment.vault?.name}
                                                         </span>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-medium">
-                                                                {payment.vault?.name}
-                                                            </span>
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {payment.recipient_name ||
-                                                                    "Unknown Recipient"}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1">
-                                                        {payment.execution_mode === "manual" && 
-                                                         payment.status === "active" && (
-                                                            <Button
-                                                                variant="default"
-                                                                size="sm"
-                                                                onClick={() => handlePayNow(payment)}
-                                                                disabled={payingPaymentId === payment.id}
-                                                            >
-                                                                {payingPaymentId === payment.id ? (
-                                                                    "Paying..."
-                                                                ) : (
-                                                                    <>
-                                                                        <Send className="mr-2 h-3 w-3" />
-                                                                        Pay
-                                                                    </>
-                                                                )}
-                                                            </Button>
-                                                        )}
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-destructive"
-                                                            onClick={() =>
-                                                                setDeletingPaymentId(payment.id)
-                                                            }
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <span className="text-xs text-muted-foreground truncate">
+                                                            {payment.recipient_name ||
+                                                                "Unknown Recipient"}
+                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -274,29 +195,15 @@ export function PaymentsCalendar({ payments: initialPayments, subAccountAddress 
                                                     <span className="text-lg font-semibold">
                                                         {formatAmount(payment.amount)}
                                                     </span>
-                                                    <div className="flex gap-2">
-                                                        <Badge
-                                                            variant={
-                                                                payment.is_recurring
-                                                                    ? "default"
-                                                                    : "secondary"
-                                                            }
-                                                            className="text-xs"
-                                                        >
-                                                            {payment.is_recurring
-                                                                ? "Recurring"
-                                                                : "One-time"}
-                                                        </Badge>
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="text-xs capitalize"
-                                                        >
-                                                            {payment.execution_mode}
-                                                        </Badge>
-                                                    </div>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="text-xs capitalize"
+                                                    >
+                                                        {payment.status}
+                                                    </Badge>
                                                 </div>
 
-                                                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                                <div className="text-xs text-muted-foreground">
                                                     <a
                                                         href={`https://basescan.org/address/${payment.recipient_address}`}
                                                         target="_blank"
@@ -306,12 +213,6 @@ export function PaymentsCalendar({ payments: initialPayments, subAccountAddress 
                                                         {shortenAddress(payment.recipient_address)}
                                                         <ArrowUpRight className="h-3 w-3" />
                                                     </a>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="text-xs capitalize"
-                                                    >
-                                                        {payment.status}
-                                                    </Badge>
                                                 </div>
 
                                                 {payment.description && (
@@ -319,6 +220,38 @@ export function PaymentsCalendar({ payments: initialPayments, subAccountAddress 
                                                         {payment.description}
                                                     </p>
                                                 )}
+
+                                                <div className="flex items-center gap-2 pt-2 border-t">
+                                                    {payment.status === "active" && (
+                                                        <Button
+                                                            variant="default"
+                                                            size="xs"
+                                                            onClick={() => handlePayNow(payment)}
+                                                            disabled={payingPaymentId === payment.id}
+                                                            className="flex-1"
+                                                        >
+                                                            {payingPaymentId === payment.id ? (
+                                                                getPaymentButtonText(payment, true)
+                                                            ) : (
+                                                                <>
+                                                                    <Send className="mr-1 h-2 w-2" />
+                                                                    {getPaymentButtonText(payment, false)}
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="text-destructive hover:text-destructive"
+                                                        onClick={() =>
+                                                            setDeletingPaymentId(payment.id)
+                                                        }
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        Delete
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </Card>
                                     ))

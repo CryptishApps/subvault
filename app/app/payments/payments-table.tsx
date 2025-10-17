@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useState } from "react"
-import { MoreHorizontal, Trash2, ArrowUpRight, Send } from "lucide-react"
+import { useState } from "react"
+import { MoreHorizontal, Trash2, ArrowUpRight, Send, Plus } from "lucide-react"
 import {
     Table,
     TableBody,
@@ -39,11 +39,13 @@ import {
 } from "@/components/ui/pagination"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { deletePayment, updatePaymentExecutionDate } from "../vaults/actions"
+import { deletePayment } from "../vaults/actions"
 import { toast } from "sonner"
-import { formatDistance, format, addSeconds } from "date-fns"
-import { getBaseAccountSDK } from "@/lib/base"
+import { formatDistance, format } from "date-fns"
 import { useAuth } from "@/components/auth-provider"
+import { usePaymentHandler, getPaymentButtonText } from "./use-payment-handler"
+import { CreatePaymentModal } from "@/components/modals/create-payment"
+import { IconLocationDollar } from "@tabler/icons-react"
 
 interface Payment {
     id: string
@@ -51,13 +53,12 @@ interface Payment {
     recipient_address: string
     recipient_name: string | null
     amount: string
-    is_recurring: boolean
-    frequency_seconds: number | null
     next_execution_date: string | null
-    execution_mode: string
     status: string
     description: string | null
     created_at: string
+    series_id: string | null
+    chain: string
     vault: {
         id: string
         name: string
@@ -69,18 +70,28 @@ interface Payment {
 interface PaymentsTableProps {
     payments: Payment[]
     subAccountAddress: string | null
+    showCreateButton?: boolean
 }
 
 const ITEMS_PER_PAGE = 10
 
-export function PaymentsTable({ payments: initialPayments, subAccountAddress }: PaymentsTableProps) {
-
+export function PaymentsTable({ payments: initialPayments, subAccountAddress, showCreateButton = false }: PaymentsTableProps) {
     const { network } = useAuth()
     const [payments, setPayments] = useState<Payment[]>(initialPayments)
     const [currentPage, setCurrentPage] = useState(1)
     const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
-    const [payingPaymentId, setPayingPaymentId] = useState<string | null>(null)
+    const [showCreateModal, setShowCreateModal] = useState(false)
+
+    const { handlePayNow, payingPaymentId } = usePaymentHandler(
+        subAccountAddress,
+        network,
+        (paymentId, updates) => {
+            setPayments(prev => prev.map(p => 
+                p.id === paymentId ? { ...p, ...updates } : p
+            ))
+        }
+    )
 
     // Calculate pagination
     const totalPages = Math.ceil(payments.length / ITEMS_PER_PAGE)
@@ -145,17 +156,6 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
         }).format(amountNum)
     }
 
-    const getFrequencyLabel = (seconds: number | null) => {
-        if (!seconds) return "One-time"
-        const days = seconds / 86400
-        if (days === 1) return "Daily"
-        if (days === 7) return "Weekly"
-        if (days === 30) return "Monthly"
-        if (days === 90) return "Quarterly"
-        if (days === 365) return "Yearly"
-        return `Every ${days} days`
-    }
-
     const getStatusColor = (status: string) => {
         switch (status) {
             case "active":
@@ -175,75 +175,6 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
         return `${address.slice(0, 6)}...${address.slice(-4)}`
     }
 
-    const handlePayNow = useCallback(async (payment: Payment) => {
-        if (!subAccountAddress) {
-            toast.error("Sub account not found. Please reconnect your wallet.")
-            return
-        }
-
-        setPayingPaymentId(payment.id)
-        const toastId = toast.loading("Processing payment...")
-
-        try {
-            // Get the Base Account SDK provider
-            const sdk = getBaseAccountSDK()
-            const provider = sdk.getProvider()
-
-            // Convert amount to hex (already in smallest unit - USDC has 6 decimals)
-            const amountHex = `0x${BigInt(payment.amount).toString(16)}`
-
-            // Send the payment using wallet_sendCalls
-            // Paymaster is configured at SDK level, so no need to pass it here
-            const callsId = await provider.request({
-                method: 'wallet_sendCalls',
-                params: [{
-                    version: "2.0",
-                    atomicRequired: true,
-                    chainId: `0x${(network === 'base' ? 8453 : 84532).toString(16)}`, // Base Sepolia (0x14a34) - change to 8453 (0x2105) for mainnet
-                    from: subAccountAddress,
-                    calls: [{
-                        to: payment.recipient_address,
-                        data: '0x', // Empty data for simple transfer
-                        value: amountHex,
-                    }],
-                }]
-            }) as string
-
-            toast.success(`Payment sent! Calls ID: ${callsId}`, { id: toastId })
-
-            // Update the payment's next execution date if recurring
-            if (payment.is_recurring && payment.frequency_seconds) {
-                const nextDate = addSeconds(new Date(), payment.frequency_seconds)
-                await updatePaymentExecutionDate(payment.id, nextDate.toISOString())
-                
-                // Update local state
-                setPayments(prev => prev.map(p => 
-                    p.id === payment.id 
-                        ? { ...p, next_execution_date: nextDate.toISOString() }
-                        : p
-                ))
-            } else {
-                // For one-time payments, set next_execution_date to null
-                await updatePaymentExecutionDate(payment.id, null)
-                
-                // Update local state
-                setPayments(prev => prev.map(p => 
-                    p.id === payment.id 
-                        ? { ...p, next_execution_date: null, status: 'completed' }
-                        : p
-                ))
-            }
-        } catch (error) {
-            console.error("Payment failed:", error)
-            toast.error(
-                error instanceof Error ? error.message : "Payment failed. Please try again.",
-                { id: toastId }
-            )
-        } finally {
-            setPayingPaymentId(null)
-        }
-    }, [subAccountAddress, network])
-
     return (
         <div className="space-y-4">
             <div className="rounded-md border">
@@ -253,9 +184,7 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
                             <TableHead>Vault</TableHead>
                             <TableHead>Recipient</TableHead>
                             <TableHead>Amount</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Next Payment</TableHead>
-                            <TableHead>Mode</TableHead>
+                            <TableHead>Scheduled Date</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="w-[120px]">Actions</TableHead>
                         </TableRow>
@@ -263,8 +192,20 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
                     <TableBody>
                         {currentPayments.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="h-24 text-center">
-                                    No payments found.
+                                <TableCell colSpan={6} className="h-32">
+                                    <div className="flex flex-col items-center justify-center gap-3 text-center">
+                                        <p className="text-sm text-muted-foreground">No payments found.</p>
+                                        {showCreateButton && (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => setShowCreateModal(true)}
+                                            >
+                                                <Plus className="mr-2 h-4 w-4" />
+                                                Create Payment
+                                            </Button>
+                                        )}
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -296,11 +237,6 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
                                         {formatAmount(payment.amount)}
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={payment.is_recurring ? "default" : "secondary"}>
-                                            {getFrequencyLabel(payment.frequency_seconds)}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
                                         {payment.next_execution_date ? (
                                             <div className="flex flex-col">
                                                 <span className="text-sm">
@@ -322,32 +258,25 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline" className="capitalize">
-                                            {payment.execution_mode}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
                                         <Badge variant={getStatusColor(payment.status)} className="capitalize">
                                             {payment.status}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex items-center gap-2">
-                                            {payment.execution_mode === "manual" && 
-                                             payment.status === "active" && 
-                                             payment.next_execution_date && (
+                                            {payment.status === "active" && payment.next_execution_date && (
                                                 <Button
                                                     variant="default"
-                                                    size="sm"
+                                                    size="xs"
                                                     onClick={() => handlePayNow(payment)}
                                                     disabled={payingPaymentId === payment.id}
                                                 >
                                                     {payingPaymentId === payment.id ? (
-                                                        "Paying..."
+                                                        getPaymentButtonText(payment, true)
                                                     ) : (
                                                         <>
-                                                            <Send className="mr-2 h-3 w-3" />
-                                                            Pay Now
+                                                            <IconLocationDollar className="mr-1 h-2 w-2" />
+                                                            {getPaymentButtonText(payment, false)}
                                                         </>
                                                     )}
                                                 </Button>
@@ -448,6 +377,13 @@ export function PaymentsTable({ payments: initialPayments, subAccountAddress }: 
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {showCreateButton && (
+                <CreatePaymentModal
+                    open={showCreateModal}
+                    onOpenChange={setShowCreateModal}
+                />
+            )}
         </div>
     )
 }

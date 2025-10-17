@@ -182,6 +182,56 @@ export async function getVaults() {
     }
 }
 
+export async function getVaultsWithStats() {
+    try {
+        const supabase = await createClient()
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return { error: "Unauthorized" }
+        }
+
+        // Fetch vaults and their stats in parallel
+        const [vaultsResult, statsResult] = await Promise.all([
+            supabase
+                .from("vaults")
+                .select("*")
+                .order("created_at", { ascending: false }),
+            supabase
+                .from("vault_spending_summary")
+                .select("*")
+        ])
+
+        if (vaultsResult.error) {
+            console.error("Error fetching vaults:", vaultsResult.error)
+            return { error: vaultsResult.error.message }
+        }
+
+        if (statsResult.error) {
+            console.error("Error fetching stats:", statsResult.error)
+            return { error: statsResult.error.message }
+        }
+
+        // Merge the stats with vault data
+        const vaultsWithStats = vaultsResult.data.map(vault => {
+            const stats = statsResult.data?.find(s => s.vault_id === vault.id) || {
+                total_payments: 0,
+                active_payments: 0,
+                completed_payments: 0,
+                total_spent: 0
+            }
+            return {
+                ...vault,
+                stats
+            }
+        })
+
+        return { data: vaultsWithStats }
+    } catch (error) {
+        return { error: "Failed to fetch vaults with stats" }
+    }
+}
+
 export async function getVault(id: string) {
     try {
         const supabase = await createClient()
@@ -275,7 +325,10 @@ export async function deleteVault(id: string) {
 // Payment Actions
 // ============================================================================
 
-export async function getPayments() {
+export async function getPayments(filters?: {
+    dateFilter?: 'overdue' | 'upcoming' | 'all'
+    status?: string
+}) {
     try {
         const supabase = await createClient()
 
@@ -284,7 +337,7 @@ export async function getPayments() {
             return { error: "Unauthorized" }
         }
 
-        const { data, error } = await supabase
+        let query = supabase
             .from("payments")
             .select(`
                 *,
@@ -295,7 +348,24 @@ export async function getPayments() {
                     handle
                 )
             `)
-            .order("next_execution_date", { ascending: true })
+
+        // Apply filters
+        if (filters?.status) {
+            query = query.eq("status", filters.status)
+        }
+
+        // Date-based filtering
+        if (filters?.dateFilter === 'overdue') {
+            const now = new Date().toISOString()
+            query = query.lt("next_execution_date", now)
+        } else if (filters?.dateFilter === 'upcoming') {
+            const now = new Date().toISOString()
+            query = query.gte("next_execution_date", now)
+        }
+
+        query = query.order("next_execution_date", { ascending: true })
+
+        const { data, error } = await query
 
         if (error) {
             console.error("Error fetching payments:", error)
@@ -378,7 +448,8 @@ export async function updatePaymentExecutionDate(id: string, nextDate: string | 
             .from("payments")
             .update({ 
                 next_execution_date: nextDate,
-                executed_count: nextDate ? 1 : 0 // Increment if setting next date (recurring)
+                status: nextDate ? 'active' : 'completed',
+                executed_count: nextDate ? 1 : 1 // Set to 1 when payment is executed
             })
             .eq("id", id)
 
@@ -389,28 +460,32 @@ export async function updatePaymentExecutionDate(id: string, nextDate: string | 
 
         revalidatePath("/app")
         revalidatePath("/app/payments")
+        revalidatePath("/app/payments/history")
+        revalidatePath("/app/payments/overdue")
+        revalidatePath("/app/payments/upcoming")
         return { success: true }
     } catch (error) {
         return { error: "Failed to update payment" }
     }
 }
 
-const createPaymentSchema = z.object({
+const createPaymentSeriesSchema = z.object({
     vault_id: z.string().uuid("Vault is required"),
     recipient_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid recipient address"),
     recipient_name: z.string().optional(),
     amount: z.string().min(1, "Amount is required"),
-    is_recurring: z.boolean().default(false),
-    frequency_seconds: z.number().optional(),
-    execution_mode: z.enum(["auto", "manual"]).default("auto"),
+    start_date: z.date(),
+    frequency: z.enum(["none", "daily", "weekly", "monthly", "yearly"]),
+    number_of_payments: z.number().min(1).max(100),
     description: z.string().optional(),
+    chain: z.enum(["base", "base-sepolia"]),
 })
 
-export type CreatePaymentInput = z.infer<typeof createPaymentSchema>
+export type CreatePaymentSeriesInput = z.infer<typeof createPaymentSeriesSchema>
 
-export async function createPayment(input: CreatePaymentInput) {
+export async function createPaymentSeries(input: CreatePaymentSeriesInput) {
     try {
-        const validated = createPaymentSchema.parse(input)
+        const validated = createPaymentSeriesSchema.parse(input)
         const supabase = await createClient()
 
         const { data: { user } } = await supabase.auth.getUser()
@@ -432,43 +507,60 @@ export async function createPayment(input: CreatePaymentInput) {
         // Convert amount from USDC (e.g., 100) to smallest unit (e.g., 100000000)
         const amountInSmallestUnit = (parseFloat(validated.amount) * 1_000_000).toString()
 
-        // Calculate next execution date
-        const nextExecutionDate = new Date()
-        if (validated.is_recurring && validated.frequency_seconds) {
-            nextExecutionDate.setSeconds(nextExecutionDate.getSeconds() + validated.frequency_seconds)
-        }
+        // Generate a series ID to group payments created together
+        const seriesId = crypto.randomUUID()
 
-        const { data, error } = await supabase
-            .from("payments")
-            .insert({
+        // Calculate dates for all payments
+        const payments = []
+        const numberOfPayments = validated.frequency === "none" ? 1 : validated.number_of_payments
+
+        for (let i = 0; i < numberOfPayments; i++) {
+            const paymentDate = new Date(validated.start_date)
+
+            if (validated.frequency === "daily") {
+                paymentDate.setDate(paymentDate.getDate() + i)
+            } else if (validated.frequency === "weekly") {
+                paymentDate.setDate(paymentDate.getDate() + (i * 7))
+            } else if (validated.frequency === "monthly") {
+                paymentDate.setMonth(paymentDate.getMonth() + i)
+            } else if (validated.frequency === "yearly") {
+                paymentDate.setFullYear(paymentDate.getFullYear() + i)
+            }
+            // For "none", paymentDate stays as start_date
+
+            payments.push({
                 vault_id: validated.vault_id,
                 recipient_address: validated.recipient_address,
                 recipient_name: validated.recipient_name || null,
                 amount: amountInSmallestUnit,
-                is_recurring: validated.is_recurring,
-                frequency_seconds: validated.frequency_seconds || null,
-                next_execution_date: nextExecutionDate.toISOString(),
-                execution_mode: validated.execution_mode,
+                next_execution_date: paymentDate.toISOString(),
                 description: validated.description || null,
                 status: 'active',
+                series_id: numberOfPayments > 1 ? seriesId : null,
+                chain: validated.chain,
             })
+        }
+
+        const { data, error } = await supabase
+            .from("payments")
+            .insert(payments)
             .select()
-            .single()
 
         if (error) {
-            console.error("Error creating payment:", error)
+            console.error("Error creating payments:", error)
             return { error: error.message }
         }
 
         revalidatePath("/app")
         revalidatePath("/app/vaults")
+        revalidatePath("/app/payments")
         revalidatePath(`/app/vaults/${validated.vault_id}`)
         return { data }
     } catch (error) {
         if (error instanceof z.ZodError) {
             return { error: error.issues[0].message }
         }
-        return { error: "Failed to create payment" }
+        return { error: "Failed to create payments" }
     }
 }
 

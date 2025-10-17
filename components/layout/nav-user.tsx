@@ -1,6 +1,7 @@
 "use client"
 
 import {
+    IconCopy,
     IconDotsVertical,
     IconLogout,
     IconSwitch,
@@ -36,6 +37,11 @@ export function NavUser() {
         setNetwork(network === 'base' ? 'base-sepolia' : 'base');
         toast.success(`Switched to ${network === 'base' ? 'Base Sepolia' : 'Base'} network`)
     }, [network, setNetwork])
+
+    const handleCopyAddress = useCallback(() => {
+        navigator.clipboard.writeText(address || '')
+        toast.success('Address copied to clipboard')
+    }, [address])
 
     return (
         <SidebarMenu>
@@ -79,11 +85,11 @@ export function NavUser() {
                                 <IconSwitch />
                                 Switch to {network === 'base' ? 'Base Sepolia' : 'Base'}
                             </DropdownMenuItem>
-                            {/* <DropdownMenuItem>
-                                <IconCreditCard />
-                                Billing
+                            <DropdownMenuItem onClick={handleCopyAddress}>
+                                <IconCopy />
+                                Copy Address
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            {/* <DropdownMenuItem>
                                 <IconNotification />
                                 Notifications
                             </DropdownMenuItem> */}

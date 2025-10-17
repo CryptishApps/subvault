@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button"
 import { createVault, updateVault, type CreateVaultInput } from "@/app/app/vaults/actions"
 import { toast } from "sonner"
 import { handleize } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
 const vaultSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -67,7 +68,7 @@ export function CreateVaultModal({
 }: CreateVaultModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const isEditMode = !!vault
-
+    const router = useRouter()
     // Map network to chain_id
     const chainId = network === "base" ? 8453 : 84532
 
@@ -126,6 +127,7 @@ export function CreateVaultModal({
                 toast.error(result.error, { id: toastId })
                 return
             }
+            router.refresh()
 
             toast.success(
                 isEditMode ? "Vault updated successfully!" : "Vault created successfully!",
