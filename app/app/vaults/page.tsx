@@ -10,7 +10,7 @@ export const metadata = {
 }
 
 export default async function VaultsPage() {
-    const result = await getVaultsWithStats()
+    const vaultsResult = await getVaultsWithStats()
 
     return (
         <div className="flex flex-col gap-6 p-6">
@@ -24,7 +24,7 @@ export default async function VaultsPage() {
             </div>
 
             <Suspense fallback={<VaultsGridSkeleton />}>
-                <VaultsGrid initialVaults={result.data || []} />
+                <VaultsGrid initialVaults={vaultsResult.data || []} />
             </Suspense>
         </div>
     )

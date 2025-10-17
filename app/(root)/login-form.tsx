@@ -13,8 +13,9 @@ import { createBaseAccountSDK } from '@base-org/account';
 
 import loginImage from '@/assets/login-image.webp';
 import Image from "next/image"
-import { useCallback } from "react"
+import { useCallback, useState } from "react"
 import { setSession } from "@/lib/supabase/utils"
+import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
@@ -30,8 +31,11 @@ export function LoginForm({
     const supabase = createClient();
     const { setUser, setAddress, network, setNetwork } = useAuth();
     const router = useRouter();
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleSignIn = useCallback(async () => {
+        setIsLoading(true);
+        const toastId = toast.loading("Connecting to your wallet...");
         try {
             const sdk = createBaseAccountSDK(
                 {
@@ -41,11 +45,13 @@ export function LoginForm({
             );
 
             const provider = sdk.getProvider();
-            await provider.request({ method: 'wallet_connect' });
+            
             // 1 — Get a fresh nonce from the server
+            toast.loading("Requesting authentication nonce...", { id: toastId });
             const nonceResponse = await fetch('/api/auth/verify', { method: 'GET' });
             const { nonce } = await nonceResponse.json();
 
+            toast.loading("Waiting for wallet signature...", { id: toastId });
             const connectResponse = await provider.request({
                 method: "wallet_connect",
                 params: [
@@ -76,6 +82,7 @@ export function LoginForm({
                 console.log('SIWE signature:', signature);
 
                 // 4 — Verify signature on the server
+                toast.loading("Verifying signature...", { id: toastId });
                 const verifyResponse = await fetch('/api/auth/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -93,6 +100,7 @@ export function LoginForm({
                 }
                 
                 // Store sub account address (auto-created on connect)
+                toast.loading("Setting up your account...", { id: toastId });
                 try {
                     const sdk = getBaseAccountSDK()
                     const subProvider = sdk.getProvider()
@@ -110,8 +118,10 @@ export function LoginForm({
                     // Don't fail the login, just log the error
                 }
                 
+                toast.success("Successfully signed in!", { id: toastId });
                 setUser(session.user);
                 setAddress(address);
+                setIsLoading(false);
                 router.refresh();
             } else {
                 // Fallback: manual signing if SIWE not available
@@ -123,12 +133,14 @@ export function LoginForm({
                 const message = `${domain} wants you to sign in with your Ethereum account:\n${address}\n\nSubVault Authentication\n\nURI: ${uri}\nVersion: 1\nChain ID: ${process.env.NEXT_PUBLIC_CHAIN_ID || 84532}\nNonce: ${nonce}\nIssued At: ${new Date().toISOString()}`;
 
                 // Request signature
+                toast.loading("Waiting for wallet signature...", { id: toastId });
                 const signature = await provider.request({
                     method: 'personal_sign',
                     params: [message, address]
                 });
 
                 // Verify signature on server
+                toast.loading("Verifying signature...", { id: toastId });
                 const verifyResponse = await fetch('/api/auth/verify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -146,6 +158,7 @@ export function LoginForm({
                 }
                 
                 // Store sub account address (auto-created on connect)
+                toast.loading("Setting up your account...", { id: toastId });
                 try {
                     const sdk = getBaseAccountSDK()
                     const subProvider = sdk.getProvider()
@@ -163,15 +176,19 @@ export function LoginForm({
                     // Don't fail the login, just log the error
                 }
                 
+                toast.success("Successfully signed in!", { id: toastId });
                 setUser(session.user);
                 setAddress(address);
+                setIsLoading(false);
                 router.refresh();
             }
 
         } catch (error) {
             console.error('Sign in failed:', error);
+            toast.error(error instanceof Error ? error.message : "Failed to sign in. Please try again.", { id: toastId });
+            setIsLoading(false);
         }
-    }, [network]);
+    }, [network, supabase, setUser, setAddress, router]);
 
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -238,8 +255,14 @@ export function LoginForm({
                                 </Select>
                             </Field>
                             <Field>
-                                <Button type="button" onClick={handleSignIn} className="w-full" size="lg">
-                                    Sign in with Base
+                                <Button 
+                                    type="button" 
+                                    onClick={handleSignIn} 
+                                    className="w-full" 
+                                    size="lg"
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? "Signing in..." : "Sign in with Base"}
                                 </Button>
                             </Field>
                             <FieldDescription className="text-center">

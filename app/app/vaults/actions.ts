@@ -253,6 +253,94 @@ export async function getVault(id: string) {
     }
 }
 
+export async function getVaultByHandle(handle: string) {
+    try {
+        const supabase = await createClient()
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return { error: "Unauthorized" }
+        }
+
+        const { data, error } = await supabase
+            .from("vaults")
+            .select("*")
+            .eq("handle", handle)
+            .eq("user_id", user.id)
+            .single()
+
+        if (error) {
+            console.error("Error fetching vault by handle:", error)
+            return { error: error.message }
+        }
+
+        return { data }
+    } catch (error) {
+        return { error: "Failed to fetch vault" }
+    }
+}
+
+export async function getVaultPayments(vaultId: string) {
+    try {
+        const supabase = await createClient()
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return { error: "Unauthorized", data: [] }
+        }
+
+        // First verify the vault belongs to the user
+        const { data: vault } = await supabase
+            .from("vaults")
+            .select("id")
+            .eq("id", vaultId)
+            .eq("user_id", user.id)
+            .single()
+
+        if (!vault) {
+            return { error: "Vault not found", data: [] }
+        }
+
+        const { data, error } = await supabase
+            .from("payments")
+            .select("*")
+            .eq("vault_id", vaultId)
+            .order("created_at", { ascending: false })
+
+        if (error) {
+            console.error("Error fetching vault payments:", error)
+            return { error: error.message, data: [] }
+        }
+
+        return { data: data || [] }
+    } catch (error) {
+        console.error("Failed to fetch vault payments:", error)
+        return { error: "Failed to fetch vault payments", data: [] }
+    }
+}
+
+export async function getPaymentsOverTime(vaultId?: string, days: number = 30) {
+    try {
+        const supabase = await createClient()
+
+        const { data, error } = await supabase
+            .rpc('get_payments_over_time', {
+                p_vault_id: vaultId || null,
+                p_days: days
+            })
+
+        if (error) {
+            console.error("Error fetching payments over time:", error)
+            return { error: error.message, data: [] }
+        }
+
+        return { data: data || [] }
+    } catch (error) {
+        console.error("Failed to fetch payments over time:", error)
+        return { error: "Failed to fetch payments over time", data: [] }
+    }
+}
+
 export async function updateVault(id: string, input: Partial<CreateVaultInput>) {
     try {
         const validated = createVaultSchema.partial().parse(input)

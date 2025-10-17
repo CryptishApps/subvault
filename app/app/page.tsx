@@ -12,9 +12,12 @@ import {
 import { VaultStatCard } from "@/components/cards/vault-stat-card"
 import { Button } from "@/components/ui/button"
 import { IconRepeat, IconCreditCard, IconShield } from "@tabler/icons-react"
-import { checkOnboardingStatus } from "./vaults/actions"
+import { checkOnboardingStatus, getPaymentsOverTime } from "./vaults/actions"
 import { OnboardingClient } from "./onboarding-client"
 import { cookies } from "next/headers"
+import { PaymentsOverTimeChart } from "@/components/charts/payments-over-time-chart"
+import { Suspense } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 async function getDashboardStats() {
     const supabase = await createClient()
@@ -67,6 +70,7 @@ async function getDashboardStats() {
 export default async function AppPage() {
     const stats = await getDashboardStats()
     const { needsOnboarding, vaultCount } = await checkOnboardingStatus()
+    const paymentsData = await getPaymentsOverTime(undefined, 30) // All vaults, 30 days
 
     // Get network from cookie (set by AuthProvider)
     const cookieStore = await cookies()
@@ -76,6 +80,7 @@ export default async function AppPage() {
         <>
             <OnboardingClient needsOnboarding={needsOnboarding} vaultCount={vaultCount} network={network} />
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            
                 <div className="grid auto-rows-fr grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
                     <VaultStatCard count={stats.vaultsCount} />
 
@@ -157,7 +162,32 @@ export default async function AppPage() {
                         </CardFooter>
                     </Card>
                 </div>
+                {/* Payment Activity Chart */}
+                <div className="px-4 lg:px-6">
+                    <Suspense fallback={<ChartSkeleton />}>
+                        <PaymentsOverTimeChart 
+                            data={paymentsData.data} 
+                            showVaultBreakdown={true}
+                            title="Treasury Overview"
+                            description="Daily payment activity across all vaults"
+                        />
+                    </Suspense>
+                </div>
             </div>
         </>
+    )
+}
+
+function ChartSkeleton() {
+    return (
+        <Card>
+            <CardContent className="p-6">
+                <div className="flex flex-col gap-4">
+                    <Skeleton className="h-6 w-48" />
+                    <Skeleton className="h-[250px] w-full" />
+                    <Skeleton className="h-4 w-64" />
+                </div>
+            </CardContent>
+        </Card>
     )
 }

@@ -43,6 +43,7 @@ interface Vault {
     description: string | null
     chain_id: number
     created_at: string
+    vault_permission_hash: string | null
     stats: {
         total_payments: number
         active_payments: number
@@ -174,9 +175,13 @@ export function VaultsGrid({ initialVaults }: VaultsGridProps) {
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm text-muted-foreground">Queued Payments</span>
+                                    <span className="text-sm text-muted-foreground">Spend Permission</span>
                                     <span className="font-semibold">
-                                        {vault.stats.active_payments}
+                                        {vault.vault_permission_hash ? (
+                                            <Badge variant="default" className="text-xs">Active</Badge>
+                                        ) : (
+                                            <Badge variant="secondary" className="text-xs">Not Set</Badge>
+                                        )}
                                     </span>
                                 </div>
                             </div>
@@ -184,7 +189,7 @@ export function VaultsGrid({ initialVaults }: VaultsGridProps) {
                             {/* Actions */}
                             <div className="flex gap-2 pt-2">
                                 <Button asChild className="flex-1" size="sm">
-                                    <Link href={`/app/vaults/${vault.id}`}>
+                                    <Link href={`/app/vaults/${vault.handle}`}>
                                         <Eye className="mr-2 h-4 w-4" />
                                         View
                                     </Link>
@@ -195,7 +200,7 @@ export function VaultsGrid({ initialVaults }: VaultsGridProps) {
                 ))}
 
                 {/* Create New Vault Card */}
-                <Card 
+                <Card
                     className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer border-dashed"
                     onClick={() => setShowCreateModal(true)}
                 >

@@ -77,11 +77,11 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -119,11 +119,11 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -146,12 +146,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   ::selection {
     @apply bg-selection text-selection-foreground;
   }
+
   html {
     @apply scroll-smooth;
   }
+
   body {
     font-synthesis-weight: none;
     text-rendering: optimizeLegibility;
@@ -224,15 +227,15 @@
       @apply !mt-0;
     }
 
-    &:first-child > h3:first-child {
+    &:first-child>h3:first-child {
       @apply !mt-0;
     }
 
-    > h3 {
+    >h3 {
       @apply !mt-16;
     }
 
-    > h3 + p {
+    >h3+p {
       @apply !mt-2;
     }
   }
@@ -325,11 +328,9 @@
       width: 2px;
       height: 100%;
       content: "";
-      background-color: color-mix(
-        in oklab,
-        var(--muted-foreground) 50%,
-        transparent
-      );
+      background-color: color-mix(in oklab,
+          var(--muted-foreground) 50%,
+          transparent);
     }
   }
 
