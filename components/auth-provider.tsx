@@ -1,16 +1,22 @@
 "use client"
 
 import { createClient } from '@/lib/supabase/client';
-import { User } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { usePathname, useRouter } from 'next/navigation';
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 interface AuthContextType {
+    loading: boolean;
+    setLoading: (loading: boolean) => void;
     user: User | null;
     setUser: (user: User | null) => void;
     address: string | null;
     setAddress: (addr: string) => void;
     handleLogout: () => void;
+    session: Session | null;
+    setSession: (session: Session | null) => void;
+    network: 'base' | 'base-sepolia';
+    setNetwork: (network: 'base' | 'base-sepolia') => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,19 +27,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const router = useRouter();
     const pathname = usePathname();
 
+    const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<User | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
     const [address, setAddress] = useState<string | null>(null);
+    const [network, setNetwork] = useState<'base' | 'base-sepolia'>('base');
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
+        setSession(null);
+        setUser(null);
+        setAddress(null);
         router.refresh();
     }
 
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             setUser(session?.user || null);
+            setSession(session || null);
             setAddress(session?.user?.user_metadata.ethereum_address || null);
-            if (event === 'SIGNED_IN') {
+            setLoading(false);
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 console.log('Signed in');
                 if (pathname === "/") {
                     router.push('/app');
@@ -52,7 +66,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return () => subscription.unsubscribe();
     }, [pathname]);
 
-    const value = React.useMemo(() => ({ user, setUser, address, setAddress, handleLogout }), [user, address]);
+    const value = React.useMemo(() => ({ 
+        user, setUser, address, setAddress, handleLogout, session, setSession, loading, setLoading, network, setNetwork 
+    }), [user, address, session, setUser, setAddress, setSession, handleLogout, loading, setLoading, network, setNetwork]);
 
     return (
         <AuthContext.Provider value={value}>

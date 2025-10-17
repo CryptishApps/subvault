@@ -9,18 +9,18 @@ import {
     FieldGroup,
     FieldLabel,
 } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { createBaseAccountSDK, pay, getPaymentStatus } from '@base-org/account';
-import { SignInWithBaseButton, BasePayButton } from '@base-org/account-ui/react';
+import { createBaseAccountSDK } from '@base-org/account';
 
 import loginImage from '@/assets/login-image.webp';
 import Image from "next/image"
-import { useState } from "react"
-import { useTheme } from "next-themes"
+import { useCallback } from "react"
 import { setSession } from "@/lib/supabase/utils"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { storeSubAccount } from "@/app/app/vaults/actions"
+import { getBaseAccountSDK } from "@/lib/base"
 
 export function LoginForm({
     className,
@@ -28,10 +28,10 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
 
     const supabase = createClient();
-    const { setUser, setAddress } = useAuth();
+    const { setUser, setAddress, network, setNetwork } = useAuth();
     const router = useRouter();
 
-    const handleSignIn = async () => {
+    const handleSignIn = useCallback(async () => {
         try {
             const sdk = createBaseAccountSDK(
                 {
@@ -46,15 +46,6 @@ export function LoginForm({
             const nonceResponse = await fetch('/api/auth/verify', { method: 'GET' });
             const { nonce } = await nonceResponse.json();
 
-            const ethRequestAccountsResponse = await provider.request({
-                method: "eth_requestAccounts",
-            })
-
-            const switchChainResponse = await provider.request({
-                method: "wallet_switchEthereumChain",
-                params: [{ chainId: '0x2105' }],
-            });
-
             const connectResponse = await provider.request({
                 method: "wallet_connect",
                 params: [
@@ -62,7 +53,7 @@ export function LoginForm({
                         version: "1",
                         capabilities: {
                             signInWithEthereum: {
-                                chainId: '0x2105',
+                                chainId: network === 'base' ? '0x2105' : '0x14A34',
                                 nonce,
                             },
                         },
@@ -100,6 +91,25 @@ export function LoginForm({
                 if (!success) {
                     throw new Error('Session set failed');
                 }
+                
+                // Store sub account address (auto-created on connect)
+                try {
+                    const sdk = getBaseAccountSDK()
+                    const subProvider = sdk.getProvider()
+                    const accounts = await subProvider.request({
+                        method: "eth_accounts",
+                        params: [],
+                    }) as string[]
+                    
+                    if (accounts.length > 0) {
+                        const subAccountAddress = accounts[0] // First account with defaultAccount: 'sub'
+                        await storeSubAccount(subAccountAddress)
+                    }
+                } catch (subAccountError) {
+                    console.error("Failed to store sub account:", subAccountError)
+                    // Don't fail the login, just log the error
+                }
+                
                 setUser(session.user);
                 setAddress(address);
                 router.refresh();
@@ -134,6 +144,25 @@ export function LoginForm({
                 if (!success) {
                     throw new Error('Session set failed');
                 }
+                
+                // Store sub account address (auto-created on connect)
+                try {
+                    const sdk = getBaseAccountSDK()
+                    const subProvider = sdk.getProvider()
+                    const accounts = await subProvider.request({
+                        method: "eth_accounts",
+                        params: [],
+                    }) as string[]
+                    
+                    if (accounts.length > 0) {
+                        const subAccountAddress = accounts[0] // First account with defaultAccount: 'sub'
+                        await storeSubAccount(subAccountAddress)
+                    }
+                } catch (subAccountError) {
+                    console.error("Failed to store sub account:", subAccountError)
+                    // Don't fail the login, just log the error
+                }
+                
                 setUser(session.user);
                 setAddress(address);
                 router.refresh();
@@ -142,7 +171,7 @@ export function LoginForm({
         } catch (error) {
             console.error('Sign in failed:', error);
         }
-    };
+    }, [network]);
 
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -195,6 +224,19 @@ export function LoginForm({
                                 </div>
                             </div>
 
+                            <Field>
+                                <FieldLabel>Network</FieldLabel>
+                                <FieldDescription>Select the network you want to use</FieldDescription>
+                                <Select value={network} onValueChange={setNetwork}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a network" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="base">Base</SelectItem>
+                                        <SelectItem value="base-sepolia">Base Sepolia</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </Field>
                             <Field>
                                 <Button type="button" onClick={handleSignIn} className="w-full" size="lg">
                                     Sign in with Base

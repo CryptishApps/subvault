@@ -10,6 +10,7 @@ import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "sonner"
 
 import "@/styles/globals.css"
+import { ToastWrapper } from "@/components/toast-wrapper"
 
 export const metadata: Metadata = {
   title: {
@@ -95,7 +96,7 @@ export default function RootLayout({
                   {children}
                 </div>
               </AuthProvider>
-              <Toaster position="top-center" />
+              <ToastWrapper />
             </ActiveThemeProvider>
           </LayoutProvider>
         </ThemeProvider>

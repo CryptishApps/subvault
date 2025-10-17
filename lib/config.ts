@@ -1,35 +1,9 @@
 export const siteConfig = {
-    name: "cryptishapps/treasury",
-    url: "https://treasury.cryptishapps.com",
-    ogImage: "https://treasury.cryptishapps.com/og.jpg",
+    name: "SubVault",
+    url: "https://subvault.xyz",
+    ogImage: "https://subvault.xyz/og.jpg",
     description:
-      "Manage your treasury, payroll and more with Treasury.",
-    navItems: [
-      {
-        href: "/docs/installation",
-        label: "Docs",
-      },
-      {
-        href: "/docs/components",
-        label: "Components",
-      },
-      {
-        href: "/blocks",
-        label: "Blocks",
-      },
-      {
-        href: "/charts/area",
-        label: "Charts",
-      },
-      {
-        href: "/themes",
-        label: "Themes",
-      },
-      {
-        href: "/colors",
-        label: "Colors",
-      },
-    ],
+      "Manage your treasury, payroll and more with SubVault.",
   }
   
   export const META_THEME_COLORS = {

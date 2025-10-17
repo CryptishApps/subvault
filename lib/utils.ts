@@ -19,3 +19,13 @@ export function generatePassword(address: string) {
 export const formatAddress = (address: string) => {
   return `${address.slice(0, 5)}...${address.slice(-5)}`;
 }
+
+export const handleize = (name: string) => {
+  const handle = name.toLowerCase().replace(/ /g, '-');
+  // Replace any non-alphanumeric characters (except hyphens) with an empty string
+  const cleanHandle = handle.replace(/[^a-z0-9-]/g, '');
+  if (cleanHandle.length > 32) {
+    return cleanHandle.slice(0, 32);
+  }
+  return cleanHandle;
+}
